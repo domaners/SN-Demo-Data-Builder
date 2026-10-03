@@ -1,0 +1,158 @@
+{
+  "schema_version": "1.0",
+  "company": {
+    "name": "Halden Freight Logistics",
+    "short_code": "HFL",
+    "industry": "Transportation and logistics",
+    "email_domain": "haldenfreight.example",
+    "ad_domain": "corp.haldenfreight.example",
+    "headquarters_country": "United Kingdom",
+    "description": "Mid-sized freight forwarder running depots in the UK and the Netherlands, with a customer shipment-tracking portal and an in-house warehouse management system."
+  },
+  "locations": [
+    { "key": "emea", "name": "EMEA", "type": "region", "parent_key": null, "city": "", "state": "", "country": "", "timezone": "Europe/London", "headcount_weight": 0, "is_datacenter": false },
+    { "key": "man-hq", "name": "Manchester HQ", "type": "site", "parent_key": "emea", "city": "Manchester", "state": "Greater Manchester", "country": "United Kingdom", "timezone": "Europe/London", "headcount_weight": 0.55, "is_datacenter": false },
+    { "key": "rtm-depot", "name": "Rotterdam Depot", "type": "site", "parent_key": "emea", "city": "Rotterdam", "state": "South Holland", "country": "Netherlands", "timezone": "Europe/Amsterdam", "headcount_weight": 0.45, "is_datacenter": false },
+    { "key": "lds-dc1", "name": "Leeds DC1", "type": "datacenter", "parent_key": "emea", "city": "Leeds", "state": "West Yorkshire", "country": "United Kingdom", "timezone": "Europe/London", "headcount_weight": 0, "is_datacenter": true },
+    { "key": "aws-euw2", "name": "AWS eu-west-2", "type": "cloud_region", "parent_key": "emea", "city": "London", "state": "", "country": "United Kingdom", "timezone": "Europe/London", "headcount_weight": 0, "is_datacenter": true }
+  ],
+  "departments": [
+    { "key": "exec", "name": "Executive", "parent_key": null, "cost_center_code": "CC-100", "headcount_weight": 0.03, "job_titles": ["Chief Executive Officer", "Chief Information Officer", "Chief Operating Officer"] },
+    { "key": "it", "name": "Information Technology", "parent_key": "exec", "cost_center_code": "CC-200", "headcount_weight": 0.12, "job_titles": ["Service Desk Analyst", "Systems Engineer", "Database Administrator", "Network Engineer", "Application Developer"] },
+    { "key": "ops", "name": "Depot Operations", "parent_key": "exec", "cost_center_code": "CC-300", "headcount_weight": 0.6, "job_titles": ["Warehouse Operative", "Shift Supervisor", "Transport Planner"] },
+    { "key": "fin", "name": "Finance", "parent_key": "exec", "cost_center_code": "CC-400", "headcount_weight": 0.1, "job_titles": ["Accountant", "Billing Clerk", "Finance Manager"] },
+    { "key": "cs", "name": "Customer Service", "parent_key": "exec", "cost_center_code": "CC-500", "headcount_weight": 0.15, "job_titles": ["Customer Service Agent", "Account Manager"] }
+  ],
+  "people": {
+    "name_locales": [
+      { "locale": "en-GB", "weight": 0.6 },
+      { "locale": "nl-NL", "weight": 0.4 }
+    ],
+    "username_pattern": "{first}.{last}",
+    "email_pattern": "{first}.{last}@{domain}",
+    "ou_path": "OU={department},OU=Users,OU={site}",
+    "named_users": [
+      { "key": "cio", "first_name": "Priya", "last_name": "Raman", "title": "Chief Information Officer", "department_key": "exec", "location_key": "man-hq", "manager_key": null, "roles": [] },
+      { "key": "sd-lead", "first_name": "Tom", "last_name": "Whitaker", "title": "Service Desk Manager", "department_key": "it", "location_key": "man-hq", "manager_key": "cio", "roles": ["itil", "itil_admin"] },
+      { "key": "wms-owner", "first_name": "Femke", "last_name": "de Vries", "title": "Head of Depot Systems", "department_key": "ops", "location_key": "rtm-depot", "manager_key": null, "roles": ["itil"] }
+    ]
+  },
+  "groups": [
+    { "key": "sd", "name": "HFL Service Desk", "type": "assignment", "manager_key": "sd-lead", "description": "First line support for all staff", "member_department_keys": ["it"], "size_weight": 0.4, "roles": ["itil"] },
+    { "key": "wintel", "name": "HFL Server Support", "type": "assignment", "manager_key": null, "description": "Windows and Linux server administration", "member_department_keys": ["it"], "size_weight": 0.2, "roles": ["itil"] },
+    { "key": "dba", "name": "HFL Database Team", "type": "assignment", "manager_key": null, "description": "SQL Server and PostgreSQL administration", "member_department_keys": ["it"], "size_weight": 0.1, "roles": ["itil"] },
+    { "key": "cab", "name": "HFL Change Advisory Board", "type": "approval", "manager_key": "cio", "description": "Approves normal changes", "member_department_keys": ["it", "exec"], "size_weight": 0.1, "roles": ["itil"] }
+  ],
+  "applications": [
+    {
+      "key": "track",
+      "name": "ShipTrack Customer Portal",
+      "description": "Public web portal where customers book and track shipments",
+      "criticality": "1 - most critical",
+      "business_owner_key": "cio",
+      "it_owner_key": "sd-lead",
+      "support_group_key": "wintel",
+      "environments": ["Production", "QA"],
+      "tiers": [
+        { "role": "load_balancer", "ci_class": "cmdb_ci_lb_bigip", "technology": "F5 BIG-IP", "instance_count": 2, "hosting_location_key": "lds-dc1", "os": null },
+        { "role": "web", "ci_class": "cmdb_ci_linux_server", "technology": "nginx 1.26", "instance_count": 3, "hosting_location_key": "aws-euw2", "os": "Ubuntu 24.04" },
+        { "role": "app", "ci_class": "cmdb_ci_app_server_tomcat", "technology": "Tomcat 10", "instance_count": 3, "hosting_location_key": "aws-euw2", "os": "Ubuntu 24.04" },
+        { "role": "database", "ci_class": "cmdb_ci_db_postgresql_instance", "technology": "PostgreSQL 16", "instance_count": 2, "hosting_location_key": "aws-euw2", "os": "Ubuntu 24.04" }
+      ],
+      "depends_on_keys": ["wms"],
+      "entry_points": [
+        { "type": "http", "url_or_host": "https://track.haldenfreight.example", "port": 443 }
+      ]
+    },
+    {
+      "key": "wms",
+      "name": "Depot Warehouse Management",
+      "description": "Inventory, picking and dock scheduling for both depots",
+      "criticality": "2 - somewhat critical",
+      "business_owner_key": "wms-owner",
+      "it_owner_key": "wms-owner",
+      "support_group_key": "wintel",
+      "environments": ["Production", "Development"],
+      "tiers": [
+        { "role": "app", "ci_class": "cmdb_ci_win_server", "technology": "IIS 10 / .NET 8", "instance_count": 2, "hosting_location_key": "lds-dc1", "os": "Windows Server 2022" },
+        { "role": "database", "ci_class": "cmdb_ci_db_mssql_instance", "technology": "SQL Server 2022", "instance_count": 1, "hosting_location_key": "lds-dc1", "os": "Windows Server 2022" }
+      ],
+      "depends_on_keys": [],
+      "entry_points": [
+        { "type": "http", "url_or_host": "https://wms.corp.haldenfreight.example", "port": 443 }
+      ]
+    }
+  ],
+  "infrastructure": {
+    "hostname_pattern": "{site}{env}{role}{n}",
+    "ip_ranges": [
+      { "location_key": "lds-dc1", "cidr": "10.20.0.0/16", "purpose": "Datacenter servers" },
+      { "location_key": "aws-euw2", "cidr": "10.40.0.0/16", "purpose": "AWS VPC" },
+      { "location_key": "man-hq", "cidr": "10.1.0.0/16", "purpose": "Office LAN" }
+    ],
+    "virtualization": [
+      { "location_key": "lds-dc1", "platform": "vmware", "host_count": 4 },
+      { "location_key": "aws-euw2", "platform": "aws", "host_count": 0 }
+    ],
+    "network_devices": [
+      { "location_key": "lds-dc1", "ci_class": "cmdb_ci_ip_switch", "manufacturer": "Cisco", "model": "Nexus 9300", "count": 4 },
+      { "location_key": "man-hq", "ci_class": "cmdb_ci_ip_router", "manufacturer": "Cisco", "model": "ISR 4451", "count": 2 }
+    ],
+    "shared_services": [
+      { "key": "ad", "name": "Active Directory", "support_group_key": "wintel", "consumed_by_all": true },
+      { "key": "backup", "name": "Enterprise Backup", "support_group_key": "wintel", "consumed_by_all": true }
+    ]
+  },
+  "catalog": [
+    {
+      "key": "laptop",
+      "name": "Standard Laptop",
+      "category": "Hardware",
+      "short_description": "Request a standard business laptop",
+      "fulfillment_group_key": "sd",
+      "needs_approval": true,
+      "demand_weight": 0.3,
+      "variables": [
+        { "name": "replacement", "label": "Is this a replacement?", "type": "boolean", "choices": [] },
+        { "name": "keyboard_layout", "label": "Keyboard layout", "type": "choice", "choices": ["UK", "US-International"] }
+      ]
+    },
+    {
+      "key": "wms-access",
+      "name": "Warehouse Management Access",
+      "category": "Access",
+      "short_description": "Request a WMS account for a depot employee",
+      "fulfillment_group_key": "wintel",
+      "needs_approval": true,
+      "demand_weight": 0.5,
+      "variables": [
+        { "name": "for_user", "label": "Requested for", "type": "reference_user", "choices": [] },
+        { "name": "depot", "label": "Depot", "type": "choice", "choices": ["Manchester", "Rotterdam"] }
+      ]
+    }
+  ],
+  "themes": [
+    {
+      "key": "db-connections",
+      "title": "WMS database connection pool exhaustion",
+      "kind": "degradation",
+      "application_keys": ["wms", "track"],
+      "ci_roles": ["database", "app"],
+      "frequency_weight": 0.3,
+      "symptoms": ["Picking screens time out", "ShipTrack shows stale shipment status", "SQL Server max connections alert"],
+      "root_cause": "Nightly stock reconciliation job holds connections open",
+      "fix": "Reschedule reconciliation job and raise pool size via normal change"
+    },
+    {
+      "key": "password-reset",
+      "title": "Depot staff locked out after password expiry",
+      "kind": "user_issue",
+      "application_keys": [],
+      "ci_roles": [],
+      "frequency_weight": 0.5,
+      "symptoms": ["Cannot log in to handheld scanner", "Account locked message"],
+      "root_cause": "90 day password expiry with no reminder on shared terminals",
+      "fix": "Self-service password reset rollout"
+    }
+  ]
+}

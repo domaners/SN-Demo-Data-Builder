@@ -1,0 +1,295 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/domaners/SN-Demo-Data-Builder/docs/schemas/blueprint.schema.json",
+  "title": "Demo Data Builder company blueprint",
+  "description": "Compact description of a fictional company that the expansion engine turns into ServiceNow records. Kept within the subset of JSON Schema supported by Claude structured outputs: every object sets additionalProperties false and lists all properties as required; no numeric or string length constraints (those are enforced by the app's validator instead).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "company", "locations", "departments", "people", "groups", "applications", "infrastructure", "catalog", "themes"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+
+    "company": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "short_code", "industry", "email_domain", "ad_domain", "headquarters_country", "description"],
+      "properties": {
+        "name": { "type": "string" },
+        "short_code": { "type": "string", "description": "2-6 upper-case letters used in CI and group naming" },
+        "industry": { "type": "string" },
+        "email_domain": { "type": "string", "format": "hostname" },
+        "ad_domain": { "type": "string", "description": "e.g. corp.example.com; becomes the DC= components of LDAP DNs" },
+        "headquarters_country": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+
+    "locations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "name", "type", "parent_key", "city", "state", "country", "timezone", "headcount_weight", "is_datacenter"],
+        "properties": {
+          "key": { "type": "string" },
+          "name": { "type": "string" },
+          "type": { "type": "string", "enum": ["region", "country", "site", "building", "datacenter", "cloud_region"] },
+          "parent_key": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+          "city": { "type": "string" },
+          "state": { "type": "string" },
+          "country": { "type": "string" },
+          "timezone": { "type": "string", "description": "IANA zone, e.g. Europe/London" },
+          "headcount_weight": { "type": "number", "description": "Relative share of staff based here; 0 for datacenters" },
+          "is_datacenter": { "type": "boolean" }
+        }
+      }
+    },
+
+    "departments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "name", "parent_key", "cost_center_code", "headcount_weight", "job_titles"],
+        "properties": {
+          "key": { "type": "string" },
+          "name": { "type": "string" },
+          "parent_key": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+          "cost_center_code": { "type": "string" },
+          "headcount_weight": { "type": "number" },
+          "job_titles": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+
+    "people": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name_locales", "username_pattern", "email_pattern", "ou_path", "named_users"],
+      "properties": {
+        "name_locales": {
+          "type": "array",
+          "description": "Locales the deterministic name generator draws from, weighted",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["locale", "weight"],
+            "properties": {
+              "locale": { "type": "string", "description": "BCP 47 tag, e.g. en-GB" },
+              "weight": { "type": "number" }
+            }
+          }
+        },
+        "username_pattern": { "type": "string", "description": "Tokens: {first}, {last}, {f}, {l}, {n}. e.g. {first}.{last}" },
+        "email_pattern": { "type": "string", "description": "Tokens as username_pattern plus {domain}" },
+        "ou_path": { "type": "string", "description": "OU template for user DNs, e.g. OU={department},OU=Users,OU={site}" },
+        "named_users": {
+          "type": "array",
+          "description": "Key personas the demo storyline needs (CIO, service desk lead, app owners)",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "first_name", "last_name", "title", "department_key", "location_key", "manager_key", "roles"],
+            "properties": {
+              "key": { "type": "string" },
+              "first_name": { "type": "string" },
+              "last_name": { "type": "string" },
+              "title": { "type": "string" },
+              "department_key": { "type": "string" },
+              "location_key": { "type": "string" },
+              "manager_key": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+              "roles": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    },
+
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "name", "type", "manager_key", "description", "member_department_keys", "size_weight", "roles"],
+        "properties": {
+          "key": { "type": "string" },
+          "name": { "type": "string" },
+          "type": { "type": "string", "enum": ["assignment", "approval", "distribution", "security", "catalog_fulfillment"] },
+          "manager_key": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+          "description": { "type": "string" },
+          "member_department_keys": { "type": "array", "items": { "type": "string" } },
+          "size_weight": { "type": "number" },
+          "roles": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+
+    "applications": {
+      "type": "array",
+      "description": "Application portfolio; each becomes a business application, a business service and one or more application services (service maps)",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "name", "description", "criticality", "business_owner_key", "it_owner_key", "support_group_key", "environments", "tiers", "depends_on_keys", "entry_points"],
+        "properties": {
+          "key": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "criticality": { "type": "string", "enum": ["1 - most critical", "2 - somewhat critical", "3 - less critical", "4 - not critical"] },
+          "business_owner_key": { "type": "string" },
+          "it_owner_key": { "type": "string" },
+          "support_group_key": { "type": "string" },
+          "environments": { "type": "array", "items": { "type": "string", "enum": ["Production", "Staging", "QA", "Development", "DR"] } },
+          "tiers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["role", "ci_class", "technology", "instance_count", "hosting_location_key", "os"],
+              "properties": {
+                "role": { "type": "string", "enum": ["load_balancer", "web", "app", "middleware", "database", "cache", "storage", "batch"] },
+                "ci_class": { "type": "string", "description": "Target CMDB class, e.g. cmdb_ci_linux_server, cmdb_ci_db_mssql_instance, cmdb_ci_app_server_tomcat" },
+                "technology": { "type": "string", "description": "e.g. Tomcat 10, PostgreSQL 16, F5 BIG-IP" },
+                "instance_count": { "type": "integer" },
+                "hosting_location_key": { "type": "string" },
+                "os": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+              }
+            }
+          },
+          "depends_on_keys": { "type": "array", "items": { "type": "string" }, "description": "Other application keys this app consumes" },
+          "entry_points": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "url_or_host", "port"],
+              "properties": {
+                "type": { "type": "string", "enum": ["http", "tcp", "mq", "db"] },
+                "url_or_host": { "type": "string" },
+                "port": { "type": "integer" }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "infrastructure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hostname_pattern", "ip_ranges", "virtualization", "network_devices", "shared_services"],
+      "properties": {
+        "hostname_pattern": { "type": "string", "description": "Tokens: {site}, {env}, {role}, {app}, {n}" },
+        "ip_ranges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["location_key", "cidr", "purpose"],
+            "properties": {
+              "location_key": { "type": "string" },
+              "cidr": { "type": "string" },
+              "purpose": { "type": "string" }
+            }
+          }
+        },
+        "virtualization": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["location_key", "platform", "host_count"],
+            "properties": {
+              "location_key": { "type": "string" },
+              "platform": { "type": "string", "enum": ["vmware", "hyper-v", "aws", "azure", "gcp", "physical"] },
+              "host_count": { "type": "integer" }
+            }
+          }
+        },
+        "network_devices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["location_key", "ci_class", "manufacturer", "model", "count"],
+            "properties": {
+              "location_key": { "type": "string" },
+              "ci_class": { "type": "string" },
+              "manufacturer": { "type": "string" },
+              "model": { "type": "string" },
+              "count": { "type": "integer" }
+            }
+          }
+        },
+        "shared_services": {
+          "type": "array",
+          "description": "Technical services every app leans on (AD, DNS, email, backup, monitoring)",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "name", "support_group_key", "consumed_by_all"],
+            "properties": {
+              "key": { "type": "string" },
+              "name": { "type": "string" },
+              "support_group_key": { "type": "string" },
+              "consumed_by_all": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+
+    "catalog": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "name", "category", "short_description", "fulfillment_group_key", "needs_approval", "demand_weight", "variables"],
+        "properties": {
+          "key": { "type": "string" },
+          "name": { "type": "string" },
+          "category": { "type": "string" },
+          "short_description": { "type": "string" },
+          "fulfillment_group_key": { "type": "string" },
+          "needs_approval": { "type": "boolean" },
+          "demand_weight": { "type": "number" },
+          "variables": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "label", "type", "choices"],
+              "properties": {
+                "name": { "type": "string" },
+                "label": { "type": "string" },
+                "type": { "type": "string", "enum": ["string", "multiline", "choice", "boolean", "date", "reference_user"] },
+                "choices": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "themes": {
+      "type": "array",
+      "description": "Recurring operational storylines that drive incident, problem and change generation",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "title", "kind", "application_keys", "ci_roles", "frequency_weight", "symptoms", "root_cause", "fix"],
+        "properties": {
+          "key": { "type": "string" },
+          "title": { "type": "string" },
+          "kind": { "type": "string", "enum": ["outage", "degradation", "user_issue", "security", "capacity", "planned_change"] },
+          "application_keys": { "type": "array", "items": { "type": "string" } },
+          "ci_roles": { "type": "array", "items": { "type": "string" } },
+          "frequency_weight": { "type": "number" },
+          "symptoms": { "type": "array", "items": { "type": "string" } },
+          "root_cause": { "type": "string" },
+          "fix": { "type": "string" }
+        }
+      }
+    }
+  }
+}
