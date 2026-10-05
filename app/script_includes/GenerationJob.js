@@ -1,0 +1,434 @@
+/**
+ * Runs long work as a series of short background steps.
+ *
+ * Each step is triggered by the x_ddb.job.step event (Script Action "DDB Job Step"),
+ * does a bounded amount of work, saves its position, and queues the next step. The
+ * "DDB Job Watchdog" scheduled job re-queues jobs that are waiting to retry or whose
+ * event was lost.
+ *
+ * Job types
+ *   blueprint  generate each blueprint section with the LLM, then validate
+ *   repair     regenerate the sections named in the validation errors, then validate
+ *   build      expand the approved blueprint and write foundation records
+ *   reset      delete everything the ledger recorded for the scenario
+ *
+ * @access package_private
+ */
+var GenerationJob = Class.create();
+
+GenerationJob.TABLE = 'x_ddb_generation_job';
+GenerationJob.EVENT = 'x_ddb.job.step';
+GenerationJob.MAX_ATTEMPTS = 4;
+GenerationJob.BACKOFF_SECONDS = [30, 60, 120, 240];
+GenerationJob.STALE_RUNNING_MINUTES = 10;
+GenerationJob.STALE_QUEUED_MINUTES = 3;
+
+GenerationJob.nowValue = function (offsetSeconds) {
+	const gdt = new GlideDateTime();
+	if (offsetSeconds)
+		gdt.addSeconds(offsetSeconds);
+	return gdt.getValue();
+};
+
+GenerationJob.recordsPerStep = function () {
+	const n = parseInt(gs.getProperty('x_ddb.max_records_per_step', '200'), 10);
+	return n > 0 ? Math.min(n, 2000) : 200;
+};
+
+/**
+ * Create and queue a job.
+ * @returns {GlideRecord} the job
+ */
+GenerationJob.start = function (type, scenarioGr, blueprintGr, data) {
+	Guard.assertNonProduction();
+	const active = new GlideRecord(GenerationJob.TABLE);
+	active.addQuery('scenario', scenarioGr.getUniqueValue());
+	active.addQuery('state', 'IN', 'queued,running,waiting');
+	active.setLimit(1);
+	active.query();
+	if (active.next())
+		throw new Error('Job ' + active.getValue('name') + ' is still in progress for this scenario. Wait for it or cancel it first.');
+
+	if (!scenarioGr.getValue('seed')) {
+		scenarioGr.setValue('seed', gs.generateGUID().substring(0, 12));
+		scenarioGr.update();
+	}
+
+	const phases = GenerationJob.phasesFor(type, data);
+	const job = new GlideRecord(GenerationJob.TABLE);
+	job.initialize();
+	job.setValue('name', scenarioGr.getValue('name') + ' - ' + type);
+	job.setValue('type', type);
+	job.setValue('scenario', scenarioGr.getUniqueValue());
+	job.setValue('blueprint', blueprintGr ? blueprintGr.getUniqueValue() : '');
+	job.setValue('state', 'queued');
+	job.setValue('phases', phases.join(','));
+	job.setValue('phase', phases[0]);
+	job.setValue('phase_index', 0);
+	job.setValue('position', 0);
+	job.setValue('attempt', 0);
+	job.setValue('progress', 0);
+	job.setValue('counts', '{}');
+	job.setValue('state_data', JSON.stringify(data || {}));
+	job.insert();
+
+	const scenarioState = { blueprint: 'generating', repair: 'generating', build: 'building', reset: 'resetting' }[type];
+	if (scenarioState) {
+		scenarioGr.setValue('state', scenarioState);
+		scenarioGr.setValue('last_job', job.getUniqueValue());
+		scenarioGr.update();
+	}
+	GenerationJob.queue(job);
+	return job;
+};
+
+GenerationJob.phasesFor = function (type, data) {
+	if (type === 'blueprint')
+		return BlueprintSchema.SECTIONS.map(function (s) { return s.key; }).concat(['validate']);
+	if (type === 'repair')
+		return ((data && data.sections) || []).concat(['validate']);
+	if (type === 'build')
+		return ['foundation', 'finalize'];
+	if (type === 'reset')
+		return ['reset'];
+	throw new Error('Unknown job type ' + type);
+};
+
+GenerationJob.queue = function (jobGr) {
+	gs.eventQueue(GenerationJob.EVENT, jobGr, jobGr.getUniqueValue(), '');
+};
+
+/** Called every minute by the watchdog scheduled job. */
+GenerationJob.watchdog = function () {
+	const requeue = function (gr, note) {
+		gr.setValue('state', 'queued');
+		new GenerationJob()._log(gr, note);
+		gr.update();
+		GenerationJob.queue(gr);
+	};
+
+	const waiting = new GlideRecord(GenerationJob.TABLE);
+	waiting.addQuery('state', 'waiting');
+	waiting.addQuery('next_run', '<=', GenerationJob.nowValue());
+	waiting.query();
+	while (waiting.next())
+		requeue(waiting, 'Retrying (attempt ' + waiting.getValue('attempt') + ')');
+
+	const stale = new GlideRecord(GenerationJob.TABLE);
+	stale.addQuery('state', 'running');
+	stale.addQuery('sys_updated_on', '<', GenerationJob.nowValue(-60 * GenerationJob.STALE_RUNNING_MINUTES));
+	stale.query();
+	while (stale.next()) {
+		const attempt = (parseInt(stale.getValue('attempt'), 10) || 0) + 1;
+		stale.setValue('attempt', attempt);
+		if (attempt > GenerationJob.MAX_ATTEMPTS) {
+			new GenerationJob()._fail(stale, 'Step stopped responding ' + attempt + ' times.');
+			continue;
+		}
+		requeue(stale, 'Step had no progress for ' + GenerationJob.STALE_RUNNING_MINUTES + ' minutes; re-queued');
+	}
+
+	const lost = new GlideRecord(GenerationJob.TABLE);
+	lost.addQuery('state', 'queued');
+	lost.addQuery('sys_updated_on', '<', GenerationJob.nowValue(-60 * GenerationJob.STALE_QUEUED_MINUTES));
+	lost.query();
+	while (lost.next())
+		requeue(lost, 'Queued step was not picked up; re-queued');
+};
+
+GenerationJob.cancel = function (jobGr) {
+	if (['queued', 'running', 'waiting'].indexOf(jobGr.getValue('state')) < 0)
+		return;
+	jobGr.setValue('state', 'cancelled');
+	jobGr.setValue('finished', GenerationJob.nowValue());
+	new GenerationJob()._log(jobGr, 'Cancelled by ' + gs.getUserName());
+	jobGr.update();
+};
+
+GenerationJob.retry = function (jobGr) {
+	if (['failed', 'cancelled'].indexOf(jobGr.getValue('state')) < 0)
+		throw new Error('Only failed or cancelled jobs can be retried.');
+	jobGr.setValue('state', 'queued');
+	jobGr.setValue('attempt', 0);
+	jobGr.setValue('error', '');
+	jobGr.setValue('finished', '');
+	new GenerationJob()._log(jobGr, 'Retry requested by ' + gs.getUserName());
+	jobGr.update();
+	GenerationJob.queue(jobGr);
+};
+
+/** Plan counts for a blueprint without writing anything (dry run). */
+GenerationJob.preview = function (blueprintGr) {
+	const scenario = new GlideRecord(BlueprintService.SCENARIO_TABLE);
+	scenario.get(blueprintGr.getValue('scenario'));
+	const bp = JSON.parse(blueprintGr.getValue('blueprint_json'));
+	const plan = new FoundationPlanner(bp, {
+		seed: scenario.getValue('seed') || 'preview',
+		headcount: BlueprintService.headcountFor(scenario)
+	}).plan();
+	return plan.counts;
+};
+
+GenerationJob.prototype = {
+	initialize: function (opts) {
+		opts = opts || {};
+		this.blueprints = opts.blueprintService || null;
+		this.requeue = opts.requeue || GenerationJob.queue;
+	},
+
+	/** Entry point for the Script Action. Runs one step of the job. */
+	step: function (jobId) {
+		const job = new GlideRecord(GenerationJob.TABLE);
+		if (!job.get(jobId))
+			return;
+		const state = job.getValue('state');
+		if (state !== 'queued' && state !== 'running')
+			return;
+
+		const blocked = Guard.whyBlocked();
+		if (blocked) {
+			this._fail(job, blocked);
+			return;
+		}
+
+		job.setValue('state', 'running');
+		if (!job.getValue('started'))
+			job.setValue('started', GenerationJob.nowValue());
+		job.update();
+
+		let finished;
+		try {
+			finished = this._runPhase(job);
+		} catch (e) {
+			this._handleError(job, e);
+			return;
+		}
+
+		if (job.getValue('state') !== 'running')
+			return;
+		if (finished)
+			this._advance(job);
+		job.update();
+		if (job.getValue('state') === 'running') {
+			job.setValue('state', 'queued');
+			job.update();
+			this.requeue(job);
+		}
+	},
+
+	_phases: function (job) {
+		return (job.getValue('phases') || '').split(',').filter(function (p) { return p; });
+	},
+
+	/** Move to the next phase or complete the job. */
+	_advance: function (job) {
+		const phases = this._phases(job);
+		const next = (parseInt(job.getValue('phase_index'), 10) || 0) + 1;
+		job.setValue('attempt', 0);
+		job.setValue('position', 0);
+		if (next >= phases.length) {
+			job.setValue('phase_index', phases.length);
+			job.setValue('progress', 100);
+			this._complete(job);
+			return;
+		}
+		job.setValue('phase_index', next);
+		job.setValue('phase', phases[next]);
+		if (job.getValue('type') !== 'build' && job.getValue('type') !== 'reset')
+			job.setValue('progress', Math.round(100 * next / phases.length));
+	},
+
+	/** @returns {boolean} true when the current phase is finished */
+	_runPhase: function (job) {
+		const type = job.getValue('type');
+		const phase = job.getValue('phase');
+		if (type === 'blueprint' || type === 'repair')
+			return this._blueprintPhase(job, type, phase);
+		if (type === 'build')
+			return this._buildPhase(job, phase);
+		if (type === 'reset')
+			return this._resetPhase(job);
+		throw new Error('Unknown job type ' + type);
+	},
+
+	_service: function () {
+		if (!this.blueprints)
+			this.blueprints = new BlueprintService();
+		return this.blueprints;
+	},
+
+	_records: function (job) {
+		const scenario = new GlideRecord(BlueprintService.SCENARIO_TABLE);
+		if (!scenario.get(job.getValue('scenario')))
+			throw new Error('Scenario no longer exists');
+		const blueprint = new GlideRecord(BlueprintService.TABLE);
+		if (job.getValue('blueprint') && !blueprint.get(job.getValue('blueprint')))
+			throw new Error('Blueprint no longer exists');
+		return { scenario: scenario, blueprint: blueprint };
+	},
+
+	_blueprintPhase: function (job, type, phase) {
+		const r = this._records(job);
+		const svc = this._service();
+		if (phase === 'validate') {
+			const result = svc.validate(r.blueprint);
+			this._log(job, result.valid ?
+				'Blueprint is valid (' + result.warnings.length + ' warning(s)). Review and approve it to build.' :
+				'Blueprint has ' + result.errors.length + ' error(s). Edit the JSON or run Repair with Claude.');
+			return true;
+		}
+		const section = BlueprintSchema.section(phase);
+		this._log(job, (type === 'repair' ? 'Repairing ' : 'Generating ') + section.label + '...');
+		const result = type === 'repair' ?
+			svc.repairSection(r.blueprint, phase, job.getUniqueValue()) :
+			svc.generateSection(r.blueprint, r.scenario, phase, job.getUniqueValue());
+		this._addUsage(job, result);
+		this._log(job, section.label + ' done (' + result.usage.inputTokens + ' in / ' +
+			result.usage.outputTokens + ' out tokens, model ' + result.model + ')');
+		return true;
+	},
+
+	_buildPhase: function (job, phase) {
+		const r = this._records(job);
+		if (r.blueprint.getValue('state') !== 'approved')
+			throw new Error('The blueprint must be approved before building.');
+		const scenarioId = r.scenario.getUniqueValue();
+		const seed = r.scenario.getValue('seed');
+
+		if (phase === 'finalize') {
+			r.scenario.setValue('state', 'built');
+			r.scenario.update();
+			this._log(job, 'Build complete.');
+			return true;
+		}
+
+		const bp = JSON.parse(r.blueprint.getValue('blueprint_json'));
+		const plan = new FoundationPlanner(bp, { seed: seed, headcount: BlueprintService.headcountFor(r.scenario) }).plan();
+		const sim = new FoundationSimulator(plan, { seed: seed, scenarioId: scenarioId });
+		const ops = sim.operations();
+		const cursor = parseInt(job.getValue('position'), 10) || 0;
+		if (cursor === 0)
+			this._log(job, 'Plan: ' + JSON.stringify(plan.counts));
+
+		const ledger = new Ledger({ scenarioId: scenarioId, jobId: job.getUniqueValue(), seed: seed, domain: 'foundation' });
+		const chunk = ops.slice(cursor, cursor + GenerationJob.recordsPerStep());
+		const result = sim.apply(chunk, ledger);
+		const next = cursor + chunk.length;
+
+		this._mergeCounts(job, ledger.counts);
+		sim.warnings.forEach(function (w) { this._log(job, 'Warning: ' + w); }, this);
+		const skipped = Object.keys(ledger.skippedFields);
+		if (skipped.length)
+			this._logOnce(job, 'Fields not present on this instance were skipped: ' + skipped.join(', '));
+		job.setValue('position', next);
+		job.setValue('total', ops.length);
+		job.setValue('progress', Math.min(99, Math.round(100 * next / Math.max(1, ops.length))));
+		if (chunk.length)
+			this._log(job, 'Wrote ' + result.applied + ' record(s) [' + (chunk[0].phase) + ' .. ' +
+				chunk[chunk.length - 1].phase + '], ' + next + '/' + ops.length);
+		return next >= ops.length;
+	},
+
+	_resetPhase: function (job) {
+		const data = JSON.parse(job.getValue('state_data') || '{}');
+		const svc = new ResetService({ scenarioId: job.getValue('scenario'), jobId: data.onlyJob || '' });
+		const before = parseInt(job.getValue('total'), 10) || 0;
+		if (!before)
+			job.setValue('total', svc.remaining());
+		const result = svc.deleteChunk(GenerationJob.recordsPerStep());
+		const total = parseInt(job.getValue('total'), 10) || 0;
+		const done = (parseInt(job.getValue('position'), 10) || 0) + result.deleted;
+		job.setValue('position', done);
+		job.setValue('progress', total ? Math.min(99, Math.round(100 * done / total)) : 99);
+		this._mergeCounts(job, result.counts, 'delete');
+		if (result.deleted)
+			this._log(job, 'Deleted ' + result.deleted + ' record(s), ' + done + '/' + total);
+		if (result.remaining === 0) {
+			const scenario = new GlideRecord(BlueprintService.SCENARIO_TABLE);
+			if (scenario.get(job.getValue('scenario'))) {
+				scenario.setValue('state', 'reset');
+				scenario.update();
+			}
+			this._log(job, 'Reset complete.');
+			return true;
+		}
+		return false;
+	},
+
+	_complete: function (job) {
+		job.setValue('state', 'complete');
+		job.setValue('finished', GenerationJob.nowValue());
+		const type = job.getValue('type');
+		if (type === 'blueprint' || type === 'repair') {
+			const scenario = new GlideRecord(BlueprintService.SCENARIO_TABLE);
+			if (scenario.get(job.getValue('scenario'))) {
+				scenario.setValue('state', 'blueprint_ready');
+				scenario.update();
+			}
+		}
+	},
+
+	_handleError: function (job, e) {
+		const attempt = (parseInt(job.getValue('attempt'), 10) || 0) + 1;
+		job.setValue('attempt', attempt);
+		if (e && e.retryable && attempt <= GenerationJob.MAX_ATTEMPTS) {
+			const delay = Math.max(e.retryAfter || 0, GenerationJob.BACKOFF_SECONDS[attempt - 1] || 240);
+			job.setValue('state', 'waiting');
+			job.setValue('next_run', GenerationJob.nowValue(delay));
+			this._log(job, 'Temporary error, retrying in ' + delay + 's: ' + e.message);
+			job.update();
+			return;
+		}
+		this._fail(job, e && e.message ? e.message : String(e));
+	},
+
+	_fail: function (job, message) {
+		job.setValue('state', 'failed');
+		job.setValue('error', String(message).substring(0, 4000));
+		job.setValue('finished', GenerationJob.nowValue());
+		this._log(job, 'Failed: ' + message);
+		job.update();
+		const scenario = new GlideRecord(BlueprintService.SCENARIO_TABLE);
+		if (scenario.get(job.getValue('scenario'))) {
+			scenario.setValue('state', 'failed');
+			scenario.update();
+		}
+	},
+
+	_addUsage: function (job, result) {
+		const u = result.usage || {};
+		job.setValue('tokens_in', (parseInt(job.getValue('tokens_in'), 10) || 0) + (u.inputTokens || 0) + (u.cacheReadTokens || 0) + (u.cacheWriteTokens || 0));
+		job.setValue('tokens_out', (parseInt(job.getValue('tokens_out'), 10) || 0) + (u.outputTokens || 0));
+		job.setValue('cost', Math.round(((parseFloat(job.getValue('cost')) || 0) + (result.cost || 0)) * 10000) / 10000);
+	},
+
+	_mergeCounts: function (job, counts, action) {
+		let current = {};
+		try {
+			current = JSON.parse(job.getValue('counts') || '{}');
+		} catch (e) { /* start over */ }
+		Object.keys(counts).forEach(function (table) {
+			const c = counts[table];
+			const entry = current[table] = current[table] || {};
+			if (typeof c === 'number') {
+				entry[action] = (entry[action] || 0) + c;
+				return;
+			}
+			Object.keys(c).forEach(function (k) { entry[k] = (entry[k] || 0) + c[k]; });
+		});
+		job.setValue('counts', JSON.stringify(current));
+	},
+
+	_log: function (job, message) {
+		const line = '[' + GenerationJob.nowValue() + '] ' + message;
+		const log = (job.getValue('log') || '') + line + '\n';
+		job.setValue('log', log.length > 60000 ? log.substring(log.length - 60000) : log);
+	},
+
+	_logOnce: function (job, message) {
+		if ((job.getValue('log') || '').indexOf(message) < 0)
+			this._log(job, message);
+	},
+
+	type: 'GenerationJob'
+};

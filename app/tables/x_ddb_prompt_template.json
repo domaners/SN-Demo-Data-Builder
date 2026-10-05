@@ -1,0 +1,17 @@
+{
+  "name": "x_ddb_prompt_template",
+  "label": "Prompt Template",
+  "plural": "Prompt Templates",
+  "read_role": "admin",
+  "display": "name",
+  "columns": [
+    { "name": "name", "label": "Name", "type": "string", "max_length": 100, "mandatory": true },
+    { "name": "version", "label": "Version", "type": "integer", "default": "1" },
+    { "name": "active", "label": "Active", "type": "boolean", "default": "true" },
+    { "name": "purpose", "label": "Purpose", "type": "choice", "max_length": 40,
+      "choices": [["blueprint", "Blueprint generation"], ["repair", "Blueprint repair"], ["narrative", "Narrative text"]] },
+    { "name": "description", "label": "Description", "type": "string", "max_length": 1000 },
+    { "name": "system_text", "label": "System prompt", "type": "string", "max_length": 65000 },
+    { "name": "user_text", "label": "User prompt", "type": "string", "max_length": 65000 }
+  ]
+}

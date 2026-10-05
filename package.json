@@ -1,0 +1,15 @@
+{
+  "name": "sn-demo-data-builder",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ServiceNow scoped app (x_ddb) that uses Claude to generate and evolve demo data",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "build": "node build/build.js",
+    "check": "node build/build.js --check && node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}

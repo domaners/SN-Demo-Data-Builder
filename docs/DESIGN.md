@@ -175,25 +175,24 @@ only, and each method checks the caller's scope and the production guard. Withou
 works: records show the `ddb.simulator` user as creator, and history starts at install time instead of
 being back-filled.
 
-### 3.4 Repository layout (once code exists)
+### 3.4 Repository layout
+
+The app is authored as plain files and compiled into an update set by `build/build.js`; see the
+README for the full table.
 
 ```
-/                         README, LICENSE
-/docs/                    This design, schemas, examples, ADRs
-/app/                     Scoped application source, exported via Studio source control
-    sys_app_*.xml
-    update/               One XML file per application file (sys_script_include, sys_db_object, ...)
-/global-helper/           Update set XML for DDBGlobalBridge
-/dist/                    Release update sets (generated)
+/app/                     Source: app.json, script_includes/, tables/, records/, scripts/, prompts/
+/build/                   Update set generator (deterministic sys_ids, dependency-ordered updates)
+/dist/                    Generated update set, committed: ddb-<version>.xml
+/test/                    Node tests against in-memory Glide mocks
+/docs/                    This design, INSTALL.md, schema, examples
 ```
 
-Installing on a PDI:
+The optional global helper (3.3) is not part of Phase 1; it ships as a separate update set when the
+ITSM simulator needs it.
 
-1. Studio > Import from Source Control, pointing at this repository; **or** retrieve and commit
-   `dist/ddb-<version>.xml` as an update set.
-2. Optionally commit `dist/ddb-global-helper-<version>.xml`.
-3. Open Demo Data Builder > Providers, choose a provider and enter its credential.
-4. Run the setup check (section 9).
+Installing on a PDI: import `dist/ddb-<version>.xml` as a retrieved update set, preview, commit, then
+follow [INSTALL.md](INSTALL.md).
 
 ### 3.5 Plugins
 
@@ -327,7 +326,7 @@ All tables are in the app scope. `sys_id` references are shown as `->`.
 | `x_ddb_narrative_pool` | -> scenario, category, theme key, CI role, state or transition, text, placeholders, used count, last used | Reusable Claude-written text |
 | `x_ddb_prompt_template` | name, purpose, version, system text, user text, schema reference, active | Editable prompts, versioned so outputs can be traced |
 | `x_ddb_llm_call` | -> job or run, provider, model, template version, prompt hash, tokens (in, out, cache read, cache write), latency, stop reason, cost, error | Audit and cost tracking |
-| `x_ddb_imp_user`, `x_ddb_imp_group`, `x_ddb_imp_location` | LDAP-shaped columns (section 7.1) | Import set staging tables |
+| `x_ddb_dir_user`, `x_ddb_dir_group` | Active Directory attributes (section 7.1) | The simulated directory that the foundation sync reads |
 
 Ledger rows are written by one Script Include (`x_ddb.Ledger`), called by every simulator, rather than
 by business rules on global tables, so the app does not add load or behaviour to tables other apps use.
@@ -421,14 +420,18 @@ Goal: users, groups and locations should look like they came from an Active Dire
    | `objectguid` | Deterministic GUID |
    | `useraccountcontrol` | `512` (enabled) or `514` (disabled) |
 
-2. Rows are loaded into `x_ddb_imp_user` and `x_ddb_imp_group` through a real import set run
-   (`sys_import_set`, `sys_import_set_run`), so the instance's import history shows regular syncs.
-3. Transform maps modelled on the platform's LDAP transforms coalesce on `objectguid` (users) or `dn`
-   (groups) and set `sys_user.source` to `ldap:<dn>`, plus `user_name`, `email`, `manager`,
-   `department`, `location`, `company`, `cost_center`, `title`, `active`. A transform script resolves
-   `manager` and `memberof` DNs to records and maintains `sys_user_grmember`.
-4. Locations, companies, departments and cost centers load first through the same path
-   (`x_ddb_imp_location` and friends), so users can reference them.
+2. Rows are written to the simulated directory, `x_ddb_dir_user` and `x_ddb_dir_group`. The
+   directory is the source of truth for people, as Active Directory is in production; later
+   lifecycle runs change the directory and re-sync.
+3. A scripted sync (`FoundationSimulator.syncUser`), modelled on the platform's LDAP transform,
+   coalesces on `objectguid` and sets `sys_user.source` to `ldap:<dn>`, plus `user_name`, `email`,
+   `manager`, `department`, `location`, `company`, `cost_center`, `title`, `active`. Group membership
+   becomes `sys_user_grmember`.
+4. Locations, companies, departments and cost centers are written first, so users can reference them.
+
+   *Phase 1 decision:* the original design loaded rows through import sets and transform maps. A
+   scripted sync was chosen instead because it needs no transform-map metadata, runs in bounded
+   background steps, and can be unit-tested. The resulting records look the same.
 5. Named personas from the blueprint get matching `sys_user_has_role` entries for their roles, and
    optionally a known demo password so presenters can log in as them.
 

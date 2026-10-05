@@ -1,0 +1,33 @@
+{
+  "name": "x_ddb_provider_config",
+  "label": "Provider Config",
+  "plural": "Provider Configs",
+  "read_role": "admin",
+  "display": "name",
+  "columns": [
+    { "name": "name", "label": "Name", "type": "string", "max_length": 100, "mandatory": true },
+    { "name": "active", "label": "Active", "type": "boolean", "default": "true" },
+    { "name": "order", "label": "Order", "type": "integer", "default": "100" },
+    { "name": "provider", "label": "Provider", "type": "choice", "max_length": 40, "default": "anthropic", "mandatory": true,
+      "choices": [["anthropic", "Anthropic API"], ["bedrock", "Amazon Bedrock (not yet implemented)"], ["vertex", "Google Vertex AI (not yet implemented)"], ["genai_controller", "Now Assist Generative AI Controller (not yet implemented)"]] },
+    { "name": "purpose", "label": "Purpose", "type": "choice", "max_length": 40, "default": "any", "mandatory": true,
+      "choices": [["any", "Any"], ["blueprint", "Blueprint generation"], ["repair", "Blueprint repair"], ["narrative", "Narrative text"]] },
+    { "name": "model", "label": "Model", "type": "string", "max_length": 100, "default": "claude-opus-5-5", "mandatory": true },
+    { "name": "effort", "label": "Effort", "type": "choice", "max_length": 20, "default": "medium",
+      "choices": [["low", "Low"], ["medium", "Medium"], ["high", "High"], ["xhigh", "Extra high"], ["max", "Max"]] },
+    { "name": "max_tokens", "label": "Max output tokens", "type": "integer", "default": "16000" },
+    { "name": "endpoint", "label": "Endpoint", "type": "string", "max_length": 255, "default": "https://api.anthropic.com/v1/messages" },
+    { "name": "credential_alias", "label": "Credential alias", "type": "string", "max_length": 100, "default": "x_ddb.anthropic",
+      "hint": "Connection & Credential alias id (e.g. x_ddb.anthropic) holding an API Key credential" },
+    { "name": "api_key", "label": "API key (fallback)", "type": "password2", "max_length": 255,
+      "hint": "Used only when the credential alias has no key" },
+    { "name": "use_fallbacks", "label": "Use server-side refusal fallbacks", "type": "boolean", "default": "true" },
+    { "name": "timeout_ms", "label": "HTTP timeout (ms)", "type": "integer", "default": "120000" },
+    { "name": "daily_token_budget", "label": "Daily token budget", "type": "integer", "default": "2000000",
+      "hint": "0 means unlimited" },
+    { "name": "input_price", "label": "Input price per MTok", "type": "decimal", "default": "4" },
+    { "name": "output_price", "label": "Output price per MTok", "type": "decimal", "default": "20" },
+    { "name": "cache_read_price", "label": "Cache read price per MTok", "type": "decimal", "default": "0.2" },
+    { "name": "cache_write_price", "label": "Cache write price per MTok", "type": "decimal", "default": "5" }
+  ]
+}

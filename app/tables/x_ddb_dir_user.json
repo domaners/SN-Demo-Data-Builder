@@ -1,0 +1,33 @@
+{
+  "name": "x_ddb_dir_user",
+  "label": "Directory User",
+  "plural": "Directory Users",
+  "display": "samaccountname",
+  "description": "Simulated Active Directory user objects; synced into sys_user",
+  "columns": [
+    { "name": "scenario", "label": "Scenario", "type": "reference", "reference": "x_ddb_scenario" },
+    { "name": "dn", "label": "distinguishedName", "type": "string", "max_length": 512 },
+    { "name": "objectguid", "label": "objectGUID", "type": "string", "max_length": 40 },
+    { "name": "samaccountname", "label": "sAMAccountName", "type": "string", "max_length": 100 },
+    { "name": "userprincipalname", "label": "userPrincipalName", "type": "string", "max_length": 200 },
+    { "name": "mail", "label": "mail", "type": "string", "max_length": 200 },
+    { "name": "givenname", "label": "givenName", "type": "string", "max_length": 100 },
+    { "name": "sn", "label": "sn", "type": "string", "max_length": 100 },
+    { "name": "displayname", "label": "displayName", "type": "string", "max_length": 200 },
+    { "name": "title", "label": "title", "type": "string", "max_length": 200 },
+    { "name": "department", "label": "department", "type": "string", "max_length": 200 },
+    { "name": "company", "label": "company", "type": "string", "max_length": 200 },
+    { "name": "l", "label": "l (city)", "type": "string", "max_length": 100 },
+    { "name": "co", "label": "co (country)", "type": "string", "max_length": 100 },
+    { "name": "physicaldeliveryofficename", "label": "physicalDeliveryOfficeName", "type": "string", "max_length": 200 },
+    { "name": "manager", "label": "manager", "type": "string", "max_length": 512 },
+    { "name": "employeeid", "label": "employeeID", "type": "string", "max_length": 40 },
+    { "name": "telephonenumber", "label": "telephoneNumber", "type": "string", "max_length": 40 },
+    { "name": "mobile", "label": "mobile", "type": "string", "max_length": 40 },
+    { "name": "useraccountcontrol", "label": "userAccountControl", "type": "string", "max_length": 10 },
+    { "name": "memberof", "label": "memberOf", "type": "string", "max_length": 8000 },
+    { "name": "extensionattribute1", "label": "extensionAttribute1 (department key)", "type": "string", "max_length": 100 },
+    { "name": "extensionattribute2", "label": "extensionAttribute2 (location key)", "type": "string", "max_length": 100 },
+    { "name": "extensionattribute3", "label": "extensionAttribute3 (manager objectGUID)", "type": "string", "max_length": 100 }
+  ]
+}

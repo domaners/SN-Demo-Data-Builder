@@ -1,0 +1,18 @@
+{
+  "name": "x_ddb_dir_group",
+  "label": "Directory Group",
+  "plural": "Directory Groups",
+  "display": "cn",
+  "description": "Simulated Active Directory group objects; synced into sys_user_group",
+  "columns": [
+    { "name": "scenario", "label": "Scenario", "type": "reference", "reference": "x_ddb_scenario" },
+    { "name": "dn", "label": "distinguishedName", "type": "string", "max_length": 512 },
+    { "name": "objectguid", "label": "objectGUID", "type": "string", "max_length": 40 },
+    { "name": "cn", "label": "cn", "type": "string", "max_length": 200 },
+    { "name": "description", "label": "description", "type": "string", "max_length": 1000 },
+    { "name": "grouptype", "label": "groupType", "type": "string", "max_length": 40 },
+    { "name": "managedby", "label": "managedBy", "type": "string", "max_length": 512 },
+    { "name": "member", "label": "member", "type": "string", "max_length": 65000 },
+    { "name": "extensionattribute1", "label": "extensionAttribute1 (group key)", "type": "string", "max_length": 100 }
+  ]
+}

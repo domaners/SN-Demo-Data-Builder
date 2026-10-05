@@ -1,0 +1,38 @@
+[
+  { "table": "sys_app_application", "key": "menu", "fields": {
+      "title": "Demo Data Builder", "active": "true", "order": "100", "roles": "x_ddb.admin,x_ddb.user",
+      "hint": "Generate and evolve demo data with Claude" } },
+  { "table": "sys_app_module", "key": "setup", "fields": {
+      "title": "Setup Check", "application": "@ref:sys_app_application:menu", "link_type": "DIRECT",
+      "query": "x_ddb_setup_check.do", "order": "100", "active": "true", "roles": "x_ddb.admin" } },
+  { "table": "sys_app_module", "key": "providers", "fields": {
+      "title": "Providers", "application": "@ref:sys_app_application:menu", "link_type": "LIST",
+      "name": "x_ddb_provider_config", "order": "150", "active": "true", "roles": "x_ddb.admin" } },
+  { "table": "sys_app_module", "key": "scenarios", "fields": {
+      "title": "Scenarios", "application": "@ref:sys_app_application:menu", "link_type": "LIST",
+      "name": "x_ddb_scenario", "order": "200", "active": "true", "roles": "x_ddb.admin,x_ddb.user" } },
+  { "table": "sys_app_module", "key": "blueprints", "fields": {
+      "title": "Blueprints", "application": "@ref:sys_app_application:menu", "link_type": "LIST",
+      "name": "x_ddb_blueprint", "order": "300", "active": "true", "roles": "x_ddb.admin,x_ddb.user" } },
+  { "table": "sys_app_module", "key": "jobs", "fields": {
+      "title": "Generation Jobs", "application": "@ref:sys_app_application:menu", "link_type": "LIST",
+      "name": "x_ddb_generation_job", "order": "400", "active": "true", "roles": "x_ddb.admin,x_ddb.user" } },
+  { "table": "sys_app_module", "key": "dir_users", "fields": {
+      "title": "Directory Users", "application": "@ref:sys_app_application:menu", "link_type": "LIST",
+      "name": "x_ddb_dir_user", "order": "500", "active": "true", "roles": "x_ddb.admin,x_ddb.user" } },
+  { "table": "sys_app_module", "key": "dir_groups", "fields": {
+      "title": "Directory Groups", "application": "@ref:sys_app_application:menu", "link_type": "LIST",
+      "name": "x_ddb_dir_group", "order": "510", "active": "true", "roles": "x_ddb.admin,x_ddb.user" } },
+  { "table": "sys_app_module", "key": "ledger", "fields": {
+      "title": "Record Ledger", "application": "@ref:sys_app_application:menu", "link_type": "LIST",
+      "name": "x_ddb_record_ledger", "order": "600", "active": "true", "roles": "x_ddb.admin,x_ddb.user" } },
+  { "table": "sys_app_module", "key": "llm_calls", "fields": {
+      "title": "LLM Calls", "application": "@ref:sys_app_application:menu", "link_type": "LIST",
+      "name": "x_ddb_llm_call", "order": "700", "active": "true", "roles": "x_ddb.admin" } },
+  { "table": "sys_app_module", "key": "prompts", "fields": {
+      "title": "Prompt Templates", "application": "@ref:sys_app_application:menu", "link_type": "LIST",
+      "name": "x_ddb_prompt_template", "order": "800", "active": "true", "roles": "x_ddb.admin" } },
+  { "table": "sys_app_module", "key": "properties", "fields": {
+      "title": "Properties", "application": "@ref:sys_app_application:menu", "link_type": "LIST",
+      "name": "sys_properties", "filter": "nameSTARTSWITHx_ddb.", "order": "900", "active": "true", "roles": "x_ddb.admin" } }
+]

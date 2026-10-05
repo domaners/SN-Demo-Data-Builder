@@ -1,0 +1,32 @@
+{
+  "name": "x_ddb_generation_job",
+  "label": "Generation Job",
+  "plural": "Generation Jobs",
+  "display": "name",
+  "columns": [
+    { "name": "name", "label": "Name", "type": "string", "max_length": 160, "read_only": true },
+    { "name": "type", "label": "Type", "type": "choice", "max_length": 20, "read_only": true,
+      "choices": [["blueprint", "Generate blueprint"], ["repair", "Repair blueprint"], ["build", "Build data"], ["reset", "Reset data"]] },
+    { "name": "scenario", "label": "Scenario", "type": "reference", "reference": "x_ddb_scenario", "read_only": true },
+    { "name": "blueprint", "label": "Blueprint", "type": "reference", "reference": "x_ddb_blueprint", "read_only": true },
+    { "name": "state", "label": "State", "type": "choice", "max_length": 20, "default": "queued", "read_only": true,
+      "choices": [["queued", "Queued"], ["running", "Running"], ["waiting", "Waiting to retry"], ["complete", "Complete"], ["failed", "Failed"], ["cancelled", "Cancelled"]] },
+    { "name": "phases", "label": "Phases", "type": "string", "max_length": 400, "read_only": true },
+    { "name": "phase", "label": "Phase", "type": "string", "max_length": 40, "read_only": true },
+    { "name": "phase_index", "label": "Phase index", "type": "integer", "read_only": true },
+    { "name": "position", "label": "Position", "type": "integer", "read_only": true },
+    { "name": "total", "label": "Total", "type": "integer", "read_only": true },
+    { "name": "progress", "label": "Progress %", "type": "integer", "read_only": true },
+    { "name": "attempt", "label": "Attempt", "type": "integer", "read_only": true },
+    { "name": "next_run", "label": "Next run", "type": "glide_date_time", "read_only": true },
+    { "name": "started", "label": "Started", "type": "glide_date_time", "read_only": true },
+    { "name": "finished", "label": "Finished", "type": "glide_date_time", "read_only": true },
+    { "name": "tokens_in", "label": "Input tokens", "type": "integer", "read_only": true },
+    { "name": "tokens_out", "label": "Output tokens", "type": "integer", "read_only": true },
+    { "name": "cost", "label": "Estimated cost (USD)", "type": "decimal", "read_only": true },
+    { "name": "counts", "label": "Record counts", "type": "string", "max_length": 8000, "read_only": true },
+    { "name": "error", "label": "Error", "type": "string", "max_length": 4000, "read_only": true },
+    { "name": "log", "label": "Log", "type": "string", "max_length": 65000, "read_only": true },
+    { "name": "state_data", "label": "State data", "type": "string", "max_length": 8000, "read_only": true }
+  ]
+}

@@ -1,0 +1,8 @@
+[
+  { "table": "sys_properties", "key": "allowed_instances", "fields": {
+      "name": "x_ddb.allowed_instances", "type": "string", "value": "",
+      "description": "Optional comma-separated instance names DDB may run on. Empty means any non-production instance." } },
+  { "table": "sys_properties", "key": "max_records_per_step", "fields": {
+      "name": "x_ddb.max_records_per_step", "type": "integer", "value": "200",
+      "description": "Records written or deleted per background step. Lower it if steps hit transaction time limits." } }
+]

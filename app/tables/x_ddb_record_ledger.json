@@ -1,0 +1,18 @@
+{
+  "name": "x_ddb_record_ledger",
+  "label": "Record Ledger",
+  "plural": "Record Ledger",
+  "display": "document_id",
+  "columns": [
+    { "name": "scenario", "label": "Scenario", "type": "reference", "reference": "x_ddb_scenario" },
+    { "name": "job", "label": "Created by job", "type": "reference", "reference": "x_ddb_generation_job" },
+    { "name": "last_job", "label": "Last updated by job", "type": "reference", "reference": "x_ddb_generation_job" },
+    { "name": "table_name", "label": "Table", "type": "string", "max_length": 80 },
+    { "name": "document_id", "label": "Record sys_id", "type": "string", "max_length": 32 },
+    { "name": "domain", "label": "Domain", "type": "choice", "max_length": 20,
+      "choices": [["foundation", "Foundation"], ["cmdb", "CMDB"], ["services", "Services"], ["itsm", "ITSM"]] },
+    { "name": "action", "label": "Action", "type": "choice", "max_length": 20,
+      "choices": [["insert", "Inserted"], ["update", "Updated"]] },
+    { "name": "blueprint_key", "label": "Blueprint key", "type": "string", "max_length": 255 }
+  ]
+}

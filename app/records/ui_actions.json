@@ -1,0 +1,66 @@
+[
+  { "table": "sys_ui_action", "key": "scenario_generate", "fields": {
+      "name": "Generate Blueprint with Claude", "table": "x_ddb_scenario", "action_name": "x_ddb_generate_blueprint",
+      "order": "100", "active": "true", "form_button": "true", "show_insert": "false", "show_update": "true", "client": "false",
+      "condition": "gs.hasRole('x_ddb.admin') && ['generating', 'building', 'resetting'].indexOf(current.getValue('state')) < 0",
+      "hint": "Ask the configured LLM to design the company for this scenario" },
+    "scripts": { "script": "scripts/ua_scenario_generate.js" } },
+  { "table": "sys_ui_action", "key": "scenario_example", "fields": {
+      "name": "Load Example Blueprint", "table": "x_ddb_scenario", "action_name": "x_ddb_load_example",
+      "order": "110", "active": "true", "form_button": "true", "show_insert": "false", "show_update": "true", "client": "false",
+      "condition": "gs.hasRole('x_ddb.admin') && ['generating', 'building', 'resetting'].indexOf(current.getValue('state')) < 0",
+      "hint": "Use the bundled Halden Freight Logistics blueprint (no LLM call)" },
+    "scripts": { "script": "scripts/ua_scenario_example.js" } },
+  { "table": "sys_ui_action", "key": "scenario_reset", "fields": {
+      "name": "Reset Scenario Data", "table": "x_ddb_scenario", "action_name": "x_ddb_reset_scenario",
+      "order": "900", "active": "true", "form_button": "true", "show_insert": "false", "show_update": "true", "client": "true",
+      "onclick": "ddbConfirmResetScenario()",
+      "condition": "gs.hasRole('x_ddb.admin') && ['generating', 'building', 'resetting'].indexOf(current.getValue('state')) < 0",
+      "hint": "Delete every record Demo Data Builder created for this scenario" },
+    "scripts": { "script": "scripts/ua_scenario_reset.js" } },
+  { "table": "sys_ui_action", "key": "blueprint_validate", "fields": {
+      "name": "Validate", "table": "x_ddb_blueprint", "action_name": "x_ddb_validate_blueprint",
+      "order": "100", "active": "true", "form_button": "true", "show_insert": "false", "show_update": "true", "client": "false",
+      "condition": "gs.hasRole('x_ddb.admin') && current.getValue('state') != 'superseded'" },
+    "scripts": { "script": "scripts/ua_blueprint_validate.js" } },
+  { "table": "sys_ui_action", "key": "blueprint_repair", "fields": {
+      "name": "Repair with Claude", "table": "x_ddb_blueprint", "action_name": "x_ddb_repair_blueprint",
+      "order": "110", "active": "true", "form_button": "true", "show_insert": "false", "show_update": "true", "client": "false",
+      "condition": "gs.hasRole('x_ddb.admin') && current.getValue('state') == 'invalid'",
+      "hint": "Send the validation errors to the LLM and regenerate the affected sections" },
+    "scripts": { "script": "scripts/ua_blueprint_repair.js" } },
+  { "table": "sys_ui_action", "key": "blueprint_preview", "fields": {
+      "name": "Preview Build", "table": "x_ddb_blueprint", "action_name": "x_ddb_preview_build",
+      "order": "120", "active": "true", "form_button": "true", "show_insert": "false", "show_update": "true", "client": "false",
+      "condition": "gs.hasRole('x_ddb.admin') && ['valid', 'approved'].indexOf(current.getValue('state')) >= 0",
+      "hint": "Show how many records a build would create, without writing anything" },
+    "scripts": { "script": "scripts/ua_blueprint_preview.js" } },
+  { "table": "sys_ui_action", "key": "blueprint_approve", "fields": {
+      "name": "Approve", "table": "x_ddb_blueprint", "action_name": "x_ddb_approve_blueprint",
+      "order": "130", "active": "true", "form_button": "true", "show_insert": "false", "show_update": "true", "client": "false",
+      "condition": "gs.hasRole('x_ddb.admin') && current.getValue('state') == 'valid'" },
+    "scripts": { "script": "scripts/ua_blueprint_approve.js" } },
+  { "table": "sys_ui_action", "key": "blueprint_build", "fields": {
+      "name": "Build Foundation Data", "table": "x_ddb_blueprint", "action_name": "x_ddb_build",
+      "order": "140", "active": "true", "form_button": "true", "show_insert": "false", "show_update": "true", "client": "false",
+      "condition": "gs.hasRole('x_ddb.admin') && current.getValue('state') == 'approved'",
+      "hint": "Create companies, locations, departments, users and groups from this blueprint" },
+    "scripts": { "script": "scripts/ua_blueprint_build.js" } },
+  { "table": "sys_ui_action", "key": "job_cancel", "fields": {
+      "name": "Cancel Job", "table": "x_ddb_generation_job", "action_name": "x_ddb_cancel_job",
+      "order": "100", "active": "true", "form_button": "true", "show_insert": "false", "show_update": "true", "client": "false",
+      "condition": "gs.hasRole('x_ddb.admin') && ['queued', 'running', 'waiting'].indexOf(current.getValue('state')) >= 0" },
+    "scripts": { "script": "scripts/ua_job_cancel.js" } },
+  { "table": "sys_ui_action", "key": "job_retry", "fields": {
+      "name": "Retry Job", "table": "x_ddb_generation_job", "action_name": "x_ddb_retry_job",
+      "order": "110", "active": "true", "form_button": "true", "show_insert": "false", "show_update": "true", "client": "false",
+      "condition": "gs.hasRole('x_ddb.admin') && ['failed', 'cancelled'].indexOf(current.getValue('state')) >= 0" },
+    "scripts": { "script": "scripts/ua_job_retry.js" } },
+  { "table": "sys_ui_action", "key": "job_reset", "fields": {
+      "name": "Reset Data From This Job", "table": "x_ddb_generation_job", "action_name": "x_ddb_reset_job",
+      "order": "900", "active": "true", "form_button": "true", "show_insert": "false", "show_update": "true", "client": "true",
+      "onclick": "ddbConfirmResetJob()",
+      "condition": "gs.hasRole('x_ddb.admin') && current.getValue('type') == 'build' && ['complete', 'failed', 'cancelled'].indexOf(current.getValue('state')) >= 0",
+      "hint": "Delete the records this build created" },
+    "scripts": { "script": "scripts/ua_job_reset.js" } }
+]

@@ -1,0 +1,10 @@
+[
+  { "table": "sys_user_role", "key": "admin", "fields": {
+      "name": "x_ddb.admin", "suffix": "admin",
+      "description": "Configure providers, generate and approve blueprints, build and reset demo data" } },
+  { "table": "sys_user_role", "key": "user", "fields": {
+      "name": "x_ddb.user", "suffix": "user",
+      "description": "View Demo Data Builder scenarios, jobs and ledger" } },
+  { "table": "sys_user_role_contains", "key": "admin_contains_user", "fields": {
+      "role": "@ref:sys_user_role:admin", "contains": "@ref:sys_user_role:user" } }
+]

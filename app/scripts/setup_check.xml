@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<j:jelly trim="false" xmlns:j="jelly:core" xmlns:g="glide" xmlns:j2="null" xmlns:g2="null">
+	<g:evaluate var="jvar_html">
+		var live = String(RP.getParameterValue('live')) == 'true';
+		var html;
+		try {
+			var check = new x_ddb.SetupCheck();
+			html = check.renderHtml(check.run(live), live);
+		} catch (e) {
+			html = 'Setup check could not run: ' + x_ddb.SetupCheck.escape(e.message);
+		}
+		html;
+	</g:evaluate>
+	<g:no_escape>${jvar_html}</g:no_escape>
+</j:jelly>

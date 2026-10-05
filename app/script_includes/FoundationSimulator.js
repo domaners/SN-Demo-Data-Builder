@@ -1,0 +1,308 @@
+/**
+ * Turns a foundation plan into an ordered list of record operations and applies them in
+ * chunks through the Ledger.
+ *
+ * Provenance follows a directory sync: people and groups are first written to the
+ * simulated directory (x_ddb_dir_user, x_ddb_dir_group, shaped like Active Directory
+ * objects), then "synced" into sys_user and sys_user_group, coalescing on objectGUID and
+ * setting source = "ldap:<DN>", just as the platform's LDAP integration does.
+ *
+ * Because every sys_id is deterministic, operations can reference records that a later
+ * chunk creates, and the list can be rebuilt identically on every step.
+ *
+ * @access package_private
+ */
+var FoundationSimulator = Class.create();
+
+FoundationSimulator.DOMAIN = 'foundation';
+
+FoundationSimulator.GROUP_TYPES = {
+	assignment: 'itil',
+	approval: 'approval',
+	catalog_fulfillment: 'catalog'
+};
+
+/** Delete order for reset: dependants before the records they point at. */
+FoundationSimulator.RESET_ORDER = [
+	'sys_user_has_role', 'sys_group_has_role', 'sys_user_grmember', 'sys_user_group', 'sys_user',
+	'x_ddb_dir_group', 'x_ddb_dir_user', 'cmn_department', 'cmn_cost_center', 'cmn_location', 'core_company'
+];
+
+FoundationSimulator.prototype = {
+	/**
+	 * @param {Object} plan  from FoundationPlanner.plan()
+	 * @param {Object} opts  { seed, scenarioId }
+	 */
+	initialize: function (plan, opts) {
+		this.plan = plan;
+		this.seed = opts.seed;
+		this.scenarioId = opts.scenarioId || '';
+		this._lookupCache = {};
+		this.warnings = [];
+	},
+
+	ref: function (table, key) {
+		return key ? Ledger.guid(this.seed, table, key) : '';
+	},
+
+	/** Every operation for a full foundation build, in dependency-safe order. */
+	operations: function () {
+		const ops = [];
+		const plan = this.plan;
+		const self = this;
+		const companyId = this.ref('core_company', plan.company.key);
+		const userRef = function (key) { return self.ref('sys_user', key); };
+		const deptHead = {};
+		plan.departments.forEach(function (d) { deptHead[d.key] = d.headKey; });
+
+		ops.push({ phase: 'org', table: 'core_company', key: plan.company.key, fields: {
+			name: plan.company.name,
+			country: plan.company.country,
+			website: plan.company.website,
+			notes: plan.company.description,
+			customer: false,
+			vendor: false,
+			manufacturer: false
+		} });
+
+		plan.costCenters.forEach(function (c) {
+			ops.push({ phase: 'org', table: 'cmn_cost_center', key: c.key, fields: {
+				name: c.name,
+				account_number: c.code,
+				manager: userRef(deptHead[c.key])
+			} });
+		});
+
+		plan.locations.forEach(function (l) {
+			ops.push({ phase: 'org', table: 'cmn_location', key: l.key, fields: {
+				name: l.name,
+				parent: self.ref('cmn_location', l.parentKey),
+				city: l.city,
+				state: l.state,
+				country: l.country,
+				time_zone: l.timezone,
+				cmn_location_type: l.type,
+				company: companyId
+			} });
+		});
+
+		plan.departments.forEach(function (d) {
+			ops.push({ phase: 'org', table: 'cmn_department', key: d.key, fields: {
+				name: d.name,
+				id: d.costCenterCode,
+				parent: self.ref('cmn_department', d.parentKey),
+				cost_center: self.ref('cmn_cost_center', d.costCenterKey),
+				company: companyId,
+				dept_head: userRef(d.headKey)
+			} });
+		});
+
+		const byKey = {};
+		plan.users.forEach(function (u) { byKey[u.key] = u; });
+		const groupDns = {};
+		plan.groups.forEach(function (g) {
+			g.memberKeys.forEach(function (k) {
+				(groupDns[k] = groupDns[k] || []).push(g.dn);
+			});
+		});
+
+		plan.users.forEach(function (u) {
+			ops.push({ phase: 'directory', table: 'x_ddb_dir_user', key: u.key, fields: self.directoryUser(u, byKey, groupDns[u.key] || []) });
+		});
+		plan.groups.forEach(function (g) {
+			ops.push({ phase: 'directory', table: 'x_ddb_dir_group', key: g.key, fields: self.directoryGroup(g, byKey) });
+		});
+
+		plan.users.forEach(function (u) {
+			ops.push({ phase: 'sync_users', table: 'sys_user', key: u.key,
+				fields: self.syncUser(self.directoryUser(u, byKey, []), u) });
+		});
+
+		plan.groups.forEach(function (g) {
+			const op = { phase: 'sync_groups', table: 'sys_user_group', key: g.key, fields: {
+				name: g.name,
+				description: g.description,
+				manager: userRef(g.managerKey),
+				email: NameGenerator.slug(g.name) + '@' + plan.company.emailDomain,
+				source: 'ldap:' + g.dn,
+				active: true
+			} };
+			if (FoundationSimulator.GROUP_TYPES[g.type])
+				op.lookups = { type: { table: 'sys_user_group_type', name: FoundationSimulator.GROUP_TYPES[g.type], optional: true } };
+			ops.push(op);
+		});
+		plan.groups.forEach(function (g) {
+			g.memberKeys.forEach(function (k) {
+				ops.push({ phase: 'sync_groups', table: 'sys_user_grmember', key: g.key + '|' + k, fields: {
+					group: self.ref('sys_user_group', g.key),
+					user: userRef(k)
+				} });
+			});
+		});
+
+		plan.groups.forEach(function (g) {
+			g.roles.forEach(function (role) {
+				ops.push({ phase: 'roles', table: 'sys_group_has_role', key: g.key + '|' + role, fields: {
+					group: self.ref('sys_user_group', g.key)
+				}, lookups: { role: { table: 'sys_user_role', name: role } } });
+			});
+		});
+		plan.roleAssignments.forEach(function (a) {
+			ops.push({ phase: 'roles', table: 'sys_user_has_role', key: a.userKey + '|' + a.role, fields: {
+				user: userRef(a.userKey)
+			}, lookups: { role: { table: 'sys_user_role', name: a.role } } });
+		});
+
+		return ops;
+	},
+
+	/** Active Directory shaped attributes for a person. */
+	directoryUser: function (u, byKey, memberOf) {
+		const mgr = byKey[u.managerKey];
+		const loc = this._loc(u.locationKey);
+		const dept = this._dept(u.departmentKey);
+		return {
+			scenario: this.scenarioId,
+			dn: u.dn,
+			objectguid: u.objectGuid,
+			samaccountname: u.username,
+			userprincipalname: u.username + '@' + this.plan.company.emailDomain,
+			mail: u.email,
+			givenname: u.first,
+			sn: u.last,
+			displayname: u.first + ' ' + u.last,
+			title: u.title,
+			department: dept ? dept.name : '',
+			company: this.plan.company.name,
+			l: loc ? loc.city : '',
+			co: loc ? loc.country : '',
+			physicaldeliveryofficename: loc ? loc.name : '',
+			manager: mgr ? mgr.dn : '',
+			employeeid: u.employeeId,
+			telephonenumber: u.phone,
+			mobile: u.mobile,
+			useraccountcontrol: u.active ? '512' : '514',
+			memberof: memberOf.join(';'),
+			extensionattribute1: u.departmentKey,
+			extensionattribute2: u.locationKey,
+			extensionattribute3: mgr ? mgr.objectGuid : ''
+		};
+	},
+
+	directoryGroup: function (g, byKey) {
+		const mgr = byKey[g.managerKey];
+		return {
+			scenario: this.scenarioId,
+			dn: g.dn,
+			objectguid: g.objectGuid,
+			cn: g.name,
+			description: g.description,
+			grouptype: g.type,
+			managedby: mgr ? mgr.dn : '',
+			member: g.memberKeys.map(function (k) { return byKey[k] ? byKey[k].dn : ''; }).join(';'),
+			extensionattribute1: g.key
+		};
+	},
+
+	/**
+	 * Directory transform: AD attributes -> sys_user fields, as an LDAP transform map would.
+	 * extensionattribute1/2/3 carry the department, location and manager keys.
+	 */
+	syncUser: function (dir, u) {
+		const deptKey = dir.extensionattribute1;
+		return {
+			user_name: dir.samaccountname,
+			first_name: dir.givenname,
+			last_name: dir.sn,
+			email: dir.mail,
+			title: dir.title,
+			employee_number: dir.employeeid,
+			phone: dir.telephonenumber,
+			mobile_phone: dir.mobile,
+			department: this.ref('cmn_department', deptKey),
+			cost_center: this.ref('cmn_cost_center', deptKey),
+			location: this.ref('cmn_location', dir.extensionattribute2),
+			company: this.ref('core_company', this.plan.company.key),
+			manager: this.ref('sys_user', dir.extensionattribute3),
+			time_zone: u.timezone,
+			source: 'ldap:' + dir.dn,
+			notification: 1,
+			active: dir.useraccountcontrol !== '514'
+		};
+	},
+
+	/**
+	 * Apply operations through the ledger.
+	 * @returns {{applied: number, skipped: number}}
+	 */
+	apply: function (ops, ledger) {
+		let applied = 0;
+		let skipped = 0;
+		for (let i = 0; i < ops.length; i++) {
+			const op = ops[i];
+			const fields = this._resolve(op);
+			if (!fields) {
+				skipped++;
+				continue;
+			}
+			ledger.upsert(op.table, op.key, fields, FoundationSimulator.DOMAIN);
+			applied++;
+		}
+		return { applied: applied, skipped: skipped };
+	},
+
+	/** Fill lookup fields; returns null when a required lookup is missing. */
+	_resolve: function (op) {
+		if (!op.lookups)
+			return op.fields;
+		const fields = {};
+		Object.keys(op.fields).forEach(function (k) { fields[k] = op.fields[k]; });
+		const names = Object.keys(op.lookups);
+		for (let i = 0; i < names.length; i++) {
+			const spec = op.lookups[names[i]];
+			const id = this._lookup(spec.table, spec.name);
+			if (id)
+				fields[names[i]] = id;
+			else if (!spec.optional) {
+				this._warn('Skipped ' + op.table + ' ' + op.key + ': no ' + spec.table + ' named "' + spec.name + '"');
+				return null;
+			}
+		}
+		return fields;
+	},
+
+	_lookup: function (table, name) {
+		const cacheKey = table + '|' + name;
+		if (!(cacheKey in this._lookupCache)) {
+			const gr = new GlideRecord(table);
+			gr.addQuery('name', name);
+			gr.setLimit(1);
+			gr.query();
+			this._lookupCache[cacheKey] = gr.next() ? gr.getUniqueValue() : '';
+		}
+		return this._lookupCache[cacheKey];
+	},
+
+	_warn: function (msg) {
+		if (this.warnings.indexOf(msg) < 0)
+			this.warnings.push(msg);
+	},
+
+	_loc: function (key) {
+		for (let i = 0; i < this.plan.locations.length; i++) {
+			if (this.plan.locations[i].key === key)
+				return this.plan.locations[i];
+		}
+		return null;
+	},
+
+	_dept: function (key) {
+		for (let i = 0; i < this.plan.departments.length; i++) {
+			if (this.plan.departments[i].key === key)
+				return this.plan.departments[i];
+		}
+		return null;
+	},
+
+	type: 'FoundationSimulator'
+};

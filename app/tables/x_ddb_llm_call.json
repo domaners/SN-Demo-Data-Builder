@@ -1,0 +1,27 @@
+{
+  "name": "x_ddb_llm_call",
+  "label": "LLM Call",
+  "plural": "LLM Calls",
+  "read_role": "admin",
+  "display": "purpose",
+  "columns": [
+    { "name": "job", "label": "Job", "type": "reference", "reference": "x_ddb_generation_job" },
+    { "name": "provider_config", "label": "Provider config", "type": "reference", "reference": "x_ddb_provider_config" },
+    { "name": "provider", "label": "Provider", "type": "string", "max_length": 40 },
+    { "name": "model", "label": "Requested model", "type": "string", "max_length": 100 },
+    { "name": "served_model", "label": "Served by model", "type": "string", "max_length": 100 },
+    { "name": "purpose", "label": "Purpose", "type": "string", "max_length": 40 },
+    { "name": "template", "label": "Prompt template", "type": "string", "max_length": 120 },
+    { "name": "prompt_hash", "label": "Prompt SHA-256", "type": "string", "max_length": 64 },
+    { "name": "input_tokens", "label": "Input tokens", "type": "integer" },
+    { "name": "output_tokens", "label": "Output tokens", "type": "integer" },
+    { "name": "cache_read_tokens", "label": "Cache read tokens", "type": "integer" },
+    { "name": "cache_write_tokens", "label": "Cache write tokens", "type": "integer" },
+    { "name": "cost", "label": "Estimated cost (USD)", "type": "decimal" },
+    { "name": "latency_ms", "label": "Latency (ms)", "type": "integer" },
+    { "name": "http_status", "label": "HTTP status", "type": "integer" },
+    { "name": "stop_reason", "label": "Stop reason", "type": "string", "max_length": 40 },
+    { "name": "error", "label": "Error", "type": "string", "max_length": 4000 },
+    { "name": "response_excerpt", "label": "Response excerpt", "type": "string", "max_length": 4000 }
+  ]
+}

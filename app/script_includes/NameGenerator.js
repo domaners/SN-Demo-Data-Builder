@@ -1,0 +1,226 @@
+/**
+ * Deterministic person names per locale, and helpers that turn them into usernames and
+ * email addresses following the blueprint's patterns.
+ *
+ * @access package_private
+ */
+var NameGenerator = Class.create();
+
+NameGenerator.DEFAULT_LOCALE = 'en-US';
+
+NameGenerator.DATA = {
+	'en-US': {
+		first: ['James', 'Mary', 'Robert', 'Patricia', 'John', 'Jennifer', 'Michael', 'Linda', 'David', 'Elizabeth',
+			'William', 'Barbara', 'Richard', 'Susan', 'Joseph', 'Jessica', 'Thomas', 'Sarah', 'Christopher', 'Karen',
+			'Daniel', 'Nancy', 'Matthew', 'Lisa', 'Anthony', 'Betty', 'Mark', 'Ashley', 'Steven', 'Emily',
+			'Andrew', 'Megan', 'Kevin', 'Rachel', 'Brian', 'Laura', 'Jason', 'Amanda', 'Ryan', 'Nicole'],
+		last: ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez',
+			'Hernandez', 'Lopez', 'Gonzalez', 'Wilson', 'Anderson', 'Thomas', 'Taylor', 'Moore', 'Jackson', 'Martin',
+			'Lee', 'Perez', 'Thompson', 'White', 'Harris', 'Sanchez', 'Clark', 'Ramirez', 'Lewis', 'Robinson',
+			'Walker', 'Young', 'Allen', 'King', 'Wright', 'Scott', 'Torres', 'Nguyen', 'Hill', 'Flores']
+	},
+	'en-GB': {
+		first: ['Oliver', 'Amelia', 'George', 'Isla', 'Harry', 'Ava', 'Jack', 'Olivia', 'Charlie', 'Emily',
+			'Thomas', 'Sophie', 'James', 'Grace', 'William', 'Lily', 'Henry', 'Freya', 'Alfie', 'Charlotte',
+			'Joshua', 'Ella', 'Daniel', 'Lucy', 'Samuel', 'Chloe', 'Joseph', 'Hannah', 'Edward', 'Eleanor',
+			'Callum', 'Megan', 'Rhys', 'Niamh', 'Euan', 'Fiona', 'Priya', 'Aisha', 'Arjun', 'Imran'],
+		last: ['Smith', 'Jones', 'Taylor', 'Brown', 'Williams', 'Wilson', 'Johnson', 'Davies', 'Robinson', 'Wright',
+			'Thompson', 'Evans', 'Walker', 'White', 'Roberts', 'Green', 'Hall', 'Wood', 'Jackson', 'Clarke',
+			'Hughes', 'Edwards', 'Turner', 'Patel', 'Khan', 'Murphy', 'Campbell', 'Stewart', 'Morgan', 'Cooper',
+			'Ward', 'Harrison', 'Baker', 'Lewis', 'Mitchell', 'Shaw', 'Holmes', 'Fletcher', 'Whitaker', 'Begum']
+	},
+	'nl-NL': {
+		first: ['Daan', 'Emma', 'Sem', 'Julia', 'Lucas', 'Sophie', 'Levi', 'Tess', 'Finn', 'Zoë',
+			'Milan', 'Mila', 'Thijs', 'Sara', 'Jesse', 'Anna', 'Bram', 'Lotte', 'Ruben', 'Femke',
+			'Lars', 'Eva', 'Stijn', 'Sanne', 'Joost', 'Lieke', 'Pieter', 'Noor', 'Wouter', 'Fleur',
+			'Koen', 'Iris', 'Bas', 'Maaike', 'Gijs', 'Anouk', 'Jeroen', 'Marloes', 'Sander', 'Esther'],
+		last: ['de Jong', 'Jansen', 'de Vries', 'van den Berg', 'van Dijk', 'Bakker', 'Janssen', 'Visser', 'Smit', 'Meijer',
+			'de Boer', 'Mulder', 'de Groot', 'Bos', 'Vos', 'Peters', 'Hendriks', 'van Leeuwen', 'Dekker', 'Brouwer',
+			'de Wit', 'Dijkstra', 'Smits', 'de Graaf', 'van der Meer', 'van der Linden', 'Kok', 'Jacobs', 'de Haan', 'Vermeulen',
+			'van den Heuvel', 'van der Veen', 'van den Broek', 'de Bruijn', 'Schouten', 'van Beek', 'Willems', 'Hoekstra', 'Koster', 'Prins']
+	},
+	'de-DE': {
+		first: ['Lukas', 'Mia', 'Leon', 'Emma', 'Finn', 'Hannah', 'Jonas', 'Sophia', 'Paul', 'Lena',
+			'Felix', 'Anna', 'Maximilian', 'Laura', 'Elias', 'Lea', 'Noah', 'Marie', 'Tim', 'Julia',
+			'Jan', 'Katharina', 'Tobias', 'Sarah', 'Stefan', 'Sabine', 'Andreas', 'Nicole', 'Markus', 'Jana',
+			'Florian', 'Johanna', 'Matthias', 'Carina', 'Sebastian', 'Miriam', 'Jürgen', 'Ute', 'Dirk', 'Petra'],
+		last: ['Müller', 'Schmidt', 'Schneider', 'Fischer', 'Weber', 'Meyer', 'Wagner', 'Becker', 'Schulz', 'Hoffmann',
+			'Schäfer', 'Koch', 'Bauer', 'Richter', 'Klein', 'Wolf', 'Schröder', 'Neumann', 'Schwarz', 'Zimmermann',
+			'Braun', 'Krüger', 'Hofmann', 'Hartmann', 'Lange', 'Schmitt', 'Werner', 'Schmitz', 'Krause', 'Meier',
+			'Lehmann', 'Schmid', 'Schulze', 'Maier', 'Köhler', 'Herrmann', 'König', 'Walter', 'Mayer', 'Huber']
+	},
+	'fr-FR': {
+		first: ['Gabriel', 'Jade', 'Louis', 'Louise', 'Raphaël', 'Emma', 'Jules', 'Alice', 'Adam', 'Chloé',
+			'Lucas', 'Lina', 'Léo', 'Léa', 'Hugo', 'Manon', 'Arthur', 'Camille', 'Nathan', 'Inès',
+			'Thomas', 'Sarah', 'Nicolas', 'Julie', 'Antoine', 'Claire', 'Julien', 'Élodie', 'Mathieu', 'Céline',
+			'Pierre', 'Amélie', 'Olivier', 'Sophie', 'François', 'Hélène', 'Yanis', 'Nadia', 'Karim', 'Mélanie'],
+		last: ['Martin', 'Bernard', 'Dubois', 'Thomas', 'Robert', 'Richard', 'Petit', 'Durand', 'Leroy', 'Moreau',
+			'Simon', 'Laurent', 'Lefebvre', 'Michel', 'Garcia', 'David', 'Bertrand', 'Roux', 'Vincent', 'Fournier',
+			'Morel', 'Girard', 'André', 'Lefèvre', 'Mercier', 'Dupont', 'Lambert', 'Bonnet', 'François', 'Martinez',
+			'Legrand', 'Garnier', 'Faure', 'Rousseau', 'Blanc', 'Guérin', 'Muller', 'Henry', 'Roussel', 'Nicolas']
+	},
+	'es-ES': {
+		first: ['Hugo', 'Lucía', 'Martín', 'Sofía', 'Lucas', 'María', 'Daniel', 'Martina', 'Pablo', 'Paula',
+			'Alejandro', 'Julia', 'Mateo', 'Valeria', 'Adrián', 'Daniela', 'Álvaro', 'Carmen', 'Javier', 'Laura',
+			'Diego', 'Elena', 'Sergio', 'Marta', 'Carlos', 'Ana', 'Jorge', 'Irene', 'Raúl', 'Cristina',
+			'Iván', 'Natalia', 'Rubén', 'Andrea', 'Miguel', 'Beatriz', 'Fernando', 'Silvia', 'Manuel', 'Rocío'],
+		last: ['García', 'Rodríguez', 'González', 'Fernández', 'López', 'Martínez', 'Sánchez', 'Pérez', 'Gómez', 'Martín',
+			'Jiménez', 'Ruiz', 'Hernández', 'Díaz', 'Moreno', 'Muñoz', 'Álvarez', 'Romero', 'Alonso', 'Gutiérrez',
+			'Navarro', 'Torres', 'Domínguez', 'Vázquez', 'Ramos', 'Gil', 'Ramírez', 'Serrano', 'Blanco', 'Molina',
+			'Morales', 'Suárez', 'Ortega', 'Delgado', 'Castro', 'Ortiz', 'Rubio', 'Marín', 'Sanz', 'Iglesias']
+	},
+	'it-IT': {
+		first: ['Leonardo', 'Sofia', 'Francesco', 'Giulia', 'Alessandro', 'Aurora', 'Lorenzo', 'Alice', 'Mattia', 'Ginevra',
+			'Andrea', 'Emma', 'Gabriele', 'Giorgia', 'Riccardo', 'Greta', 'Tommaso', 'Beatrice', 'Edoardo', 'Anna',
+			'Marco', 'Chiara', 'Luca', 'Francesca', 'Davide', 'Martina', 'Simone', 'Sara', 'Stefano', 'Elena',
+			'Paolo', 'Valentina', 'Matteo', 'Federica', 'Giovanni', 'Silvia', 'Roberto', 'Laura', 'Fabio', 'Paola'],
+		last: ['Rossi', 'Russo', 'Ferrari', 'Esposito', 'Bianchi', 'Romano', 'Colombo', 'Ricci', 'Marino', 'Greco',
+			'Bruno', 'Gallo', 'Conti', 'De Luca', 'Mancini', 'Costa', 'Giordano', 'Rizzo', 'Lombardi', 'Moretti',
+			'Barbieri', 'Fontana', 'Santoro', 'Mariani', 'Rinaldi', 'Caruso', 'Ferrara', 'Galli', 'Martini', 'Leone',
+			'Longo', 'Gentile', 'Martinelli', 'Vitale', 'Lombardo', 'Serra', 'Coppola', 'De Santis', 'D\'Angelo', 'Marchetti']
+	},
+	'pt-BR': {
+		first: ['Miguel', 'Helena', 'Arthur', 'Alice', 'Gael', 'Laura', 'Heitor', 'Maria', 'Theo', 'Valentina',
+			'Davi', 'Heloísa', 'Gabriel', 'Manuela', 'Bernardo', 'Júlia', 'Samuel', 'Sophia', 'João', 'Isabella',
+			'Pedro', 'Beatriz', 'Lucas', 'Mariana', 'Rafael', 'Camila', 'Felipe', 'Larissa', 'Gustavo', 'Fernanda',
+			'Rodrigo', 'Patrícia', 'Thiago', 'Aline', 'Bruno', 'Juliana', 'André', 'Renata', 'Diego', 'Vanessa'],
+		last: ['Silva', 'Santos', 'Oliveira', 'Souza', 'Rodrigues', 'Ferreira', 'Alves', 'Pereira', 'Lima', 'Gomes',
+			'Costa', 'Ribeiro', 'Martins', 'Carvalho', 'Almeida', 'Lopes', 'Soares', 'Fernandes', 'Vieira', 'Barbosa',
+			'Rocha', 'Dias', 'Nascimento', 'Andrade', 'Moreira', 'Nunes', 'Marques', 'Machado', 'Mendes', 'Freitas',
+			'Cardoso', 'Ramos', 'Gonçalves', 'Santana', 'Teixeira', 'Araújo', 'Pinto', 'Correia', 'Monteiro', 'Cavalcanti']
+	},
+	'en-IN': {
+		first: ['Aarav', 'Ananya', 'Vivaan', 'Diya', 'Aditya', 'Saanvi', 'Vihaan', 'Aadhya', 'Arjun', 'Kavya',
+			'Sai', 'Ishita', 'Reyansh', 'Pooja', 'Krishna', 'Priya', 'Ishaan', 'Neha', 'Rohan', 'Sneha',
+			'Rahul', 'Divya', 'Amit', 'Anjali', 'Vikram', 'Meera', 'Suresh', 'Lakshmi', 'Karthik', 'Swati',
+			'Nikhil', 'Shreya', 'Manish', 'Deepa', 'Rajesh', 'Nandini', 'Sanjay', 'Aishwarya', 'Varun', 'Radhika'],
+		last: ['Sharma', 'Verma', 'Gupta', 'Singh', 'Kumar', 'Patel', 'Reddy', 'Nair', 'Iyer', 'Menon',
+			'Rao', 'Joshi', 'Mehta', 'Shah', 'Desai', 'Chopra', 'Kapoor', 'Malhotra', 'Bose', 'Banerjee',
+			'Chatterjee', 'Mukherjee', 'Das', 'Pillai', 'Naidu', 'Kulkarni', 'Deshpande', 'Jain', 'Agarwal', 'Bhat',
+			'Saxena', 'Mishra', 'Pandey', 'Tiwari', 'Yadav', 'Krishnan', 'Subramanian', 'Ghosh', 'Sinha', 'Arora']
+	},
+	'ja-JP': {
+		first: ['Haruto', 'Yui', 'Sota', 'Hina', 'Yuto', 'Mei', 'Riku', 'Sakura', 'Hiroto', 'Aoi',
+			'Kaito', 'Yuna', 'Ren', 'Rin', 'Takumi', 'Miyu', 'Kenji', 'Yuki', 'Daiki', 'Ayaka',
+			'Shota', 'Nanami', 'Kazuki', 'Mao', 'Takeshi', 'Emi', 'Hiroshi', 'Keiko', 'Naoki', 'Tomoko',
+			'Ryo', 'Saki', 'Yusuke', 'Misaki', 'Kenta', 'Natsuki', 'Akira', 'Haruka', 'Satoshi', 'Kana'],
+		last: ['Sato', 'Suzuki', 'Takahashi', 'Tanaka', 'Watanabe', 'Ito', 'Yamamoto', 'Nakamura', 'Kobayashi', 'Kato',
+			'Yoshida', 'Yamada', 'Sasaki', 'Yamaguchi', 'Matsumoto', 'Inoue', 'Kimura', 'Hayashi', 'Shimizu', 'Yamazaki',
+			'Mori', 'Abe', 'Ikeda', 'Hashimoto', 'Yamashita', 'Ishikawa', 'Nakajima', 'Maeda', 'Fujita', 'Ogawa',
+			'Goto', 'Okada', 'Hasegawa', 'Murakami', 'Kondo', 'Ishii', 'Saito', 'Sakamoto', 'Endo', 'Aoki']
+	},
+	'sv-SE': {
+		first: ['William', 'Alice', 'Liam', 'Maja', 'Noah', 'Elsa', 'Hugo', 'Astrid', 'Lucas', 'Wilma',
+			'Oliver', 'Freja', 'Elias', 'Olivia', 'Adam', 'Saga', 'Axel', 'Ebba', 'Erik', 'Linnea',
+			'Johan', 'Anna', 'Anders', 'Karin', 'Lars', 'Sara', 'Magnus', 'Emma', 'Fredrik', 'Ingrid',
+			'Gustav', 'Klara', 'Oskar', 'Sofia', 'Viktor', 'Ida', 'Mikael', 'Malin', 'Per', 'Helena'],
+		last: ['Andersson', 'Johansson', 'Karlsson', 'Nilsson', 'Eriksson', 'Larsson', 'Olsson', 'Persson', 'Svensson', 'Gustafsson',
+			'Pettersson', 'Jonsson', 'Jansson', 'Hansson', 'Bengtsson', 'Jönsson', 'Lindberg', 'Jakobsson', 'Magnusson', 'Olofsson',
+			'Lindström', 'Lindqvist', 'Lindgren', 'Berg', 'Axelsson', 'Bergström', 'Lundberg', 'Lind', 'Lundgren', 'Lundqvist',
+			'Mattsson', 'Berglund', 'Fredriksson', 'Sandberg', 'Henriksson', 'Forsberg', 'Sjöberg', 'Wallin', 'Engström', 'Eklund']
+	},
+	'pl-PL': {
+		first: ['Jan', 'Zuzanna', 'Antoni', 'Julia', 'Aleksander', 'Zofia', 'Franciszek', 'Hanna', 'Jakub', 'Maja',
+			'Piotr', 'Anna', 'Tomasz', 'Katarzyna', 'Paweł', 'Magdalena', 'Michał', 'Agnieszka', 'Krzysztof', 'Joanna',
+			'Marcin', 'Monika', 'Łukasz', 'Ewa', 'Grzegorz', 'Aleksandra', 'Mateusz', 'Natalia', 'Kamil', 'Karolina',
+			'Adam', 'Marta', 'Wojciech', 'Barbara', 'Dawid', 'Paulina', 'Rafał', 'Dorota', 'Szymon', 'Beata'],
+		last: ['Nowak', 'Kowalski', 'Wiśniewski', 'Wójcik', 'Kowalczyk', 'Kamiński', 'Lewandowski', 'Zieliński', 'Szymański', 'Woźniak',
+			'Dąbrowski', 'Kozłowski', 'Jankowski', 'Mazur', 'Wojciechowski', 'Kwiatkowski', 'Krawczyk', 'Kaczmarek', 'Piotrowski', 'Grabowski',
+			'Zając', 'Pawłowski', 'Michalski', 'Król', 'Wieczorek', 'Jabłoński', 'Wróbel', 'Nowakowski', 'Majewski', 'Olszewski',
+			'Stępień', 'Malinowski', 'Jaworski', 'Adamczyk', 'Dudek', 'Nowicki', 'Pawlak', 'Górski', 'Witkowski', 'Walczak']
+	},
+	'zh-CN': {
+		first: ['Wei', 'Fang', 'Jing', 'Li', 'Min', 'Hui', 'Yan', 'Jun', 'Lei', 'Ying',
+			'Hao', 'Xin', 'Yu', 'Ting', 'Jie', 'Qing', 'Tao', 'Mei', 'Chen', 'Lan',
+			'Bo', 'Xia', 'Peng', 'Na', 'Gang', 'Hong', 'Ming', 'Juan', 'Qiang', 'Yun',
+			'Kai', 'Lin', 'Long', 'Shu', 'Feng', 'Rui', 'Zhen', 'Xue', 'Bin', 'Dan'],
+		last: ['Wang', 'Li', 'Zhang', 'Liu', 'Chen', 'Yang', 'Huang', 'Zhao', 'Wu', 'Zhou',
+			'Xu', 'Sun', 'Ma', 'Zhu', 'Hu', 'Guo', 'He', 'Gao', 'Lin', 'Luo',
+			'Zheng', 'Liang', 'Xie', 'Song', 'Tang', 'Han', 'Feng', 'Deng', 'Cao', 'Peng',
+			'Zeng', 'Xiao', 'Tian', 'Dong', 'Pan', 'Yuan', 'Cai', 'Jiang', 'Yu', 'Du']
+	}
+};
+
+/** Locales that reuse another locale's lists. */
+NameGenerator.ALIASES = {
+	'en-AU': 'en-GB', 'en-IE': 'en-GB', 'en-NZ': 'en-GB', 'en-ZA': 'en-GB',
+	'en-CA': 'en-US', 'nl-BE': 'nl-NL', 'de-AT': 'de-DE', 'de-CH': 'de-DE',
+	'fr-BE': 'fr-FR', 'fr-CA': 'fr-FR', 'fr-CH': 'fr-FR', 'es-MX': 'es-ES',
+	'es-AR': 'es-ES', 'es-CO': 'es-ES', 'pt-PT': 'pt-BR', 'en-SG': 'zh-CN'
+};
+
+NameGenerator.resolve = function (locale) {
+	if (NameGenerator.DATA[locale])
+		return locale;
+	if (NameGenerator.ALIASES[locale])
+		return NameGenerator.ALIASES[locale];
+	const lang = String(locale || '').split('-')[0];
+	const keys = Object.keys(NameGenerator.DATA);
+	for (let i = 0; i < keys.length; i++) {
+		if (keys[i].split('-')[0] === lang)
+			return keys[i];
+	}
+	return null;
+};
+
+NameGenerator.supports = function (locale) {
+	return NameGenerator.resolve(locale) !== null;
+};
+
+NameGenerator.FOLD = {
+	'à': 'a', 'á': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a', 'å': 'a', 'æ': 'ae', 'ç': 'c', 'è': 'e', 'é': 'e',
+	'ê': 'e', 'ë': 'e', 'ì': 'i', 'í': 'i', 'î': 'i', 'ï': 'i', 'ñ': 'n', 'ò': 'o', 'ó': 'o', 'ô': 'o',
+	'õ': 'o', 'ö': 'o', 'ø': 'o', 'ù': 'u', 'ú': 'u', 'û': 'u', 'ü': 'u', 'ý': 'y', 'ÿ': 'y', 'ß': 'ss',
+	'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ś': 's', 'ź': 'z', 'ż': 'z', 'œ': 'oe'
+};
+
+/** Lower-case ASCII, letters and digits only ("de Vries" -> "devries", "Müller" -> "muller"). */
+NameGenerator.slug = function (text) {
+	const lower = String(text || '').toLowerCase();
+	let out = '';
+	for (let i = 0; i < lower.length; i++) {
+		const ch = lower.charAt(i);
+		const folded = NameGenerator.FOLD[ch] !== undefined ? NameGenerator.FOLD[ch] : ch;
+		if (/^[a-z0-9]+$/.test(folded))
+			out += folded;
+	}
+	return out;
+};
+
+/** Apply a pattern such as "{first}.{last}" or "{f}{last}{n}". */
+NameGenerator.applyPattern = function (pattern, person, n, domain) {
+	const first = NameGenerator.slug(person.first);
+	const last = NameGenerator.slug(person.last);
+	return String(pattern)
+		.replace(/\{first\}/g, first)
+		.replace(/\{last\}/g, last)
+		.replace(/\{f\}/g, first.charAt(0))
+		.replace(/\{l\}/g, last.charAt(0))
+		.replace(/\{n\}/g, n ? String(n) : '')
+		.replace(/\{domain\}/g, domain || '');
+};
+
+NameGenerator.prototype = {
+	/**
+	 * @param {Prng} prng
+	 * @param {Array<{locale: string, weight: number}>} locales
+	 */
+	initialize: function (prng, locales) {
+		this.prng = prng;
+		this.locales = (locales && locales.length) ? locales : [{ locale: NameGenerator.DEFAULT_LOCALE, weight: 1 }];
+	},
+
+	/** @returns {{first: string, last: string, locale: string}} */
+	next: function () {
+		const choice = this.prng.weighted(this.locales, function (l) { return l.weight; });
+		const locale = NameGenerator.resolve(choice.locale) || NameGenerator.DEFAULT_LOCALE;
+		const data = NameGenerator.DATA[locale];
+		return {
+			first: this.prng.pick(data.first),
+			last: this.prng.pick(data.last),
+			locale: locale
+		};
+	},
+
+	type: 'NameGenerator'
+};

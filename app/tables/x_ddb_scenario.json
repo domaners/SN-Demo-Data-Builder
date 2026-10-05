@@ -1,0 +1,24 @@
+{
+  "name": "x_ddb_scenario",
+  "label": "Scenario",
+  "plural": "Scenarios",
+  "display": "name",
+  "columns": [
+    { "name": "name", "label": "Name", "type": "string", "max_length": 100, "mandatory": true },
+    { "name": "industry", "label": "Industry", "type": "string", "max_length": 200, "mandatory": true },
+    { "name": "company_name", "label": "Company name", "type": "string", "max_length": 100,
+      "hint": "Leave empty to let Claude invent one" },
+    { "name": "size_tier", "label": "Size", "type": "choice", "max_length": 20, "default": "medium",
+      "choices": [["small", "Small (200 people)"], ["medium", "Medium (1,000 people)"], ["large", "Large (5,000 people)"], ["custom", "Custom headcount"]] },
+    { "name": "headcount", "label": "Custom headcount", "type": "integer" },
+    { "name": "regions", "label": "Regions", "type": "string", "max_length": 400,
+      "hint": "Countries or regions the company operates in, e.g. UK, Netherlands" },
+    { "name": "instructions", "label": "Additional instructions", "type": "string", "max_length": 4000 },
+    { "name": "seed", "label": "Seed", "type": "string", "max_length": 40,
+      "hint": "Same blueprint and seed always produce the same data. Generated if empty." },
+    { "name": "state", "label": "State", "type": "choice", "max_length": 40, "default": "draft", "read_only": true,
+      "choices": [["draft", "Draft"], ["generating", "Generating blueprint"], ["blueprint_ready", "Blueprint ready"], ["blueprint_approved", "Blueprint approved"], ["building", "Building"], ["built", "Built"], ["resetting", "Resetting"], ["reset", "Reset"], ["failed", "Failed"]] },
+    { "name": "active_blueprint", "label": "Approved blueprint", "type": "reference", "reference": "x_ddb_blueprint", "read_only": true },
+    { "name": "last_job", "label": "Last job", "type": "reference", "reference": "x_ddb_generation_job", "read_only": true }
+  ]
+}

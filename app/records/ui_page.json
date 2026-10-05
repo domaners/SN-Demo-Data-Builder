@@ -1,0 +1,6 @@
+[
+  { "table": "sys_ui_page", "key": "setup_check", "fields": {
+      "name": "setup_check", "endpoint": "x_ddb_setup_check.do", "category": "general",
+      "description": "Demo Data Builder installation and configuration checks" },
+    "scripts": { "html": "scripts/setup_check.xml" } }
+]

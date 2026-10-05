@@ -1,0 +1,20 @@
+[
+  { "table": "sysevent_register", "key": "job_step", "fields": {
+      "event_name": "x_ddb.job.step", "suffix": "job.step", "table": "x_ddb_generation_job",
+      "fired_by": "GenerationJob", "description": "Runs the next step of a Demo Data Builder job. parm1 = job sys_id." } },
+  { "table": "sysevent_script_action", "key": "job_step", "fields": {
+      "name": "DDB Job Step", "event_name": "x_ddb.job.step", "active": "true", "order": "100",
+      "description": "Runs one bounded step of a generation job" },
+    "scripts": { "script": "scripts/job_step.js" } },
+  { "table": "sysauto_script", "key": "watchdog", "fields": {
+      "name": "DDB Job Watchdog", "active": "true", "run_type": "periodically", "run_period": "1970-01-01 00:01:00",
+      "conditional": "false" },
+    "scripts": { "script": "scripts/watchdog.js" } },
+  { "table": "sys_script", "key": "blueprint_edit_resets_state", "fields": {
+      "name": "DDB Blueprint edited - revalidate", "collection": "x_ddb_blueprint", "when": "before",
+      "action_insert": "false", "action_update": "true", "action_delete": "false", "action_query": "false",
+      "advanced": "true", "active": "true", "order": "100",
+      "condition": "current.blueprint_json.changes()",
+      "description": "A hand-edited blueprint must be validated (and re-approved) before it can be built" },
+    "scripts": { "script": "scripts/br_blueprint_edited.js" } }
+]
