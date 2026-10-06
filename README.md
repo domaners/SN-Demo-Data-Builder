@@ -33,6 +33,7 @@ so the same blueprint and seed always give the same instance and API spend stays
 | `app/prompts/` | Prompt templates (front matter + `=== system ===` / `=== user ===`) |
 | `build/` | Generates the update set from `app/` |
 | `dist/ddb-<version>.xml` | The importable update set (generated, committed) |
+| `servicenow/`, `sn_source_control.properties` | The same app in Studio source-control layout, for **Import From Source Control** (generated, committed) |
 | `test/` | Node tests running the Script Includes against in-memory Glide mocks |
 | `docs/` | Design, install guide, blueprint schema and example |
 
@@ -45,11 +46,11 @@ Requires Node 20 or later; no dependencies.
 
 ```sh
 npm test          # unit, planner, provider, job and build tests
-npm run build     # regenerate dist/ddb-<version>.xml
-npm run check     # fail if dist/ is stale, then run the tests
+npm run build     # regenerate dist/ddb-<version>.xml and servicenow/
+npm run check     # fail if dist/ or servicenow/ is stale, then run the tests
 ```
 
-Commit the regenerated `dist/` file with every change under `app/` or `docs/schemas`/`docs/examples`;
+Commit the regenerated `dist/` and `servicenow/` files with every change under `app/` or `docs/schemas`/`docs/examples`;
 `npm run check` and the build test fail otherwise.
 
 The tests run the real Script Include source in a Node `vm` with mocks of `GlideRecord`, `gs`,

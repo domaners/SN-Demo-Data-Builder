@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include"><sys_script_include action="INSERT_OR_UPDATE"><access>package_private</access><active>true</active><api_name>x_ddb.SetupCheck</api_name><caller_access/><client_callable>false</client_callable><description>Installation and configuration checks shown on the Setup Check page (x_ddb_setup_check.do). Pass live = true to also call the provider's health check.</description><name>SetupCheck</name><script>/**
+ * Installation and configuration checks shown on the Setup Check page
+ * (x_ddb_setup_check.do). Pass live = true to also call the provider's health check.
+ *
+ * @access package_private
+ */
+var SetupCheck = Class.create();
+
+SetupCheck.FOUNDATION_TABLES = [
+	'core_company', 'cmn_cost_center', 'cmn_location', 'cmn_department', 'sys_user', 'sys_user_group',
+	'sys_user_grmember', 'sys_user_has_role', 'sys_group_has_role'
+];
+
+/** Tables later phases use; reported for information only. */
+SetupCheck.OPTIONAL_TABLES = [
+	{ table: 'cmdb_ci_service_auto', label: 'Application services (CSDM)' },
+	{ table: 'cmdb_ci_service_discovered', label: 'Service Mapping' },
+	{ table: 'em_event', label: 'Event Management' },
+	{ table: 'sc_cat_item', label: 'Service Catalog' },
+	{ table: 'chg_model', label: 'Change models' }
+];
+
+SetupCheck.escape = function (s) {
+	return String(s === null || s === undefined ? '' : s)
+		.replace(/&amp;/g, '&amp;amp;').replace(/&lt;/g, '&amp;lt;').replace(/&gt;/g, '&amp;gt;')
+		.replace(/&quot;/g, '&amp;quot;').replace(/'/g, '&amp;#39;');
+};
+
+SetupCheck.prototype = {
+	initialize: function () {},
+
+	/** @returns {Array&lt;{name: string, status: string, message: string}&gt;} */
+	run: function (live) {
+		const out = [];
+		const add = function (name, status, message) { out.push({ name: name, status: status, message: message }); };
+		const safely = function (name, fn) {
+			try {
+				fn();
+			} catch (e) {
+				add(name, 'fail', 'Check failed: ' + e.message);
+			}
+		};
+
+		safely('Instance guard', function () {
+			const reason = Guard.whyBlocked();
+			add('Instance guard', reason ? 'fail' : 'ok', reason || 'Not a production instance; DDB may run here.');
+		});
+
+		safely('Your role', function () {
+			add('Your role', Guard.isAdmin() ? 'ok' : 'fail',
+				Guard.isAdmin() ? 'You have ' + Guard.ADMIN_ROLE + '.' : 'You need ' + Guard.ADMIN_ROLE + ' (or admin) to run DDB.');
+		});
+
+		let config = null;
+		safely('Provider configuration', function () {
+			config = ProviderFactory.findConfig('blueprint');
+			if (!config) {
+				add('Provider configuration', 'fail', 'No active provider config for blueprints. Create one under Demo Data Builder &gt; Providers.');
+				return;
+			}
+			add('Provider configuration', 'ok', config.getValue('name') + ': ' + config.getValue('provider') + ', model ' +
+				config.getValue('model') + ', effort ' + config.getValue('effort'));
+		});
+
+		if (config) {
+			safely('API credential', function () {
+				const key = ProviderFactory.resolveApiKey(config.getUniqueValue());
+				add('API credential', key ? 'ok' : 'fail', key ?
+					'An API key is configured (' + (config.getValue('credential_alias') ? 'credential alias ' + config.getValue('credential_alias') : 'encrypted field on the provider config') + ').' :
+					'No API key found. Set credential_alias to a Connection &amp; Credential alias with an API Key credential, or fill in the API key field.');
+			});
+
+			safely('Outbound HTTP timeout', function () {
+				const max = gs.getProperty('glide.http.outbound.max_timeout', '');
+				const wanted = Math.round((parseInt(config.getValue('timeout_ms'), 10) || 120000) / 1000);
+				const maxSeconds = parseInt(max, 10);
+				if (max &amp;&amp; maxSeconds &lt; wanted)
+					add('Outbound HTTP timeout', 'warn', 'glide.http.outbound.max_timeout is ' + max + 's but the provider config asks for ' + wanted +
+						's. Long blueprint sections may time out; raise the property or lower the effort.');
+				else
+					add('Outbound HTTP timeout', 'ok', 'Provider timeout ' + wanted + 's' + (max ? ' (instance maximum ' + max + 's)' : ''));
+			});
+
+			if (live) {
+				safely('Provider connection', function () {
+					const result = ProviderFactory.fromRecord(config).healthCheck();
+					add('Provider connection', result.ok ? 'ok' : 'fail', result.message);
+				});
+			} else {
+				add('Provider connection', 'info', 'Not tested. Use &quot;Test connection&quot; to call the provider (uses no tokens).');
+			}
+		}
+
+		safely('Background processing', function () {
+			const ev = new GlideRecord('sysevent_register');
+			ev.addQuery('event_name', GenerationJob.EVENT);
+			ev.query();
+			const action = new GlideRecord('sysevent_script_action');
+			action.addQuery('event_name', GenerationJob.EVENT);
+			action.addQuery('active', true);
+			action.query();
+			const job = new GlideRecord('sysauto_script');
+			job.addQuery('name', 'DDB Job Watchdog');
+			job.addQuery('active', true);
+			job.query();
+			const missing = [];
+			if (!ev.hasNext())
+				missing.push('event ' + GenerationJob.EVENT);
+			if (!action.hasNext())
+				missing.push('script action &quot;DDB Job Step&quot;');
+			if (!job.hasNext())
+				missing.push('scheduled job &quot;DDB Job Watchdog&quot;');
+			add('Background processing', missing.length ? 'fail' : 'ok', missing.length ?
+				'Missing or inactive: ' + missing.join(', ') + '.' : 'Job event, script action and watchdog are active.');
+		});
+
+		safely('Table access', function () {
+			const blocked = [];
+			SetupCheck.FOUNDATION_TABLES.forEach(function (t) {
+				const gr = new GlideRecord(t);
+				if (!gr.isValid() || !gr.canCreate() || !gr.canWrite() || !gr.canDelete())
+					blocked.push(t);
+			});
+			add('Table access', blocked.length ? 'warn' : 'ok', blocked.length ?
+				'Cannot create, update or delete: ' + blocked.join(', ') + '. Check Application Access on these tables and the cross-scope privileges.' :
+				'Foundation tables can be written.');
+		});
+
+		safely('Optional features', function () {
+			const present = [];
+			const absent = [];
+			SetupCheck.OPTIONAL_TABLES.forEach(function (o) {
+				(new GlideRecord(o.table).isValid() ? present : absent).push(o.label);
+			});
+			add('Optional features', 'info', 'Available: ' + (present.join(', ') || 'none') +
+				'. Not installed: ' + (absent.join(', ') || 'none') + '. (Used from Phase 2 onwards.)');
+		});
+
+		return out;
+	},
+
+	renderHtml: function (results, live) {
+		const colours = { ok: '#2e7d32', warn: '#b26a00', fail: '#c62828', info: '#455a64' };
+		const labels = { ok: 'OK', warn: 'Warning', fail: 'Problem', info: 'Info' };
+		const rows = results.map(function (r) {
+			return '&lt;tr&gt;&lt;td style=&quot;padding:6px 12px;font-weight:600&quot;&gt;' + SetupCheck.escape(r.name) + '&lt;/td&gt;' +
+				'&lt;td style=&quot;padding:6px 12px;color:' + colours[r.status] + ';font-weight:600&quot;&gt;' + labels[r.status] + '&lt;/td&gt;' +
+				'&lt;td style=&quot;padding:6px 12px&quot;&gt;' + SetupCheck.escape(r.message) + '&lt;/td&gt;&lt;/tr&gt;';
+		}).join('');
+		const problems = results.filter(function (r) { return r.status === 'fail'; }).length;
+		return '&lt;div style=&quot;font-family:sans-serif;max-width:1100px;padding:16px&quot;&gt;' +
+			'&lt;h2 style=&quot;margin:0 0 4px&quot;&gt;Demo Data Builder setup check&lt;/h2&gt;' +
+			'&lt;p style=&quot;margin:0 0 16px&quot;&gt;' + (problems ? problems + ' problem(s) need attention.' : 'Ready to use.') + '&lt;/p&gt;' +
+			'&lt;table style=&quot;border-collapse:collapse;width:100%&quot; border=&quot;1&quot; cellspacing=&quot;0&quot;&gt;' +
+			'&lt;tr style=&quot;background:#eceff1&quot;&gt;&lt;th style=&quot;padding:6px 12px;text-align:left&quot;&gt;Check&lt;/th&gt;&lt;th style=&quot;padding:6px 12px;text-align:left&quot;&gt;Result&lt;/th&gt;&lt;th style=&quot;padding:6px 12px;text-align:left&quot;&gt;Details&lt;/th&gt;&lt;/tr&gt;' +
+			rows + '&lt;/table&gt;' +
+			'&lt;p style=&quot;margin-top:16px&quot;&gt;&lt;a href=&quot;x_ddb_setup_check.do?live=true&quot;&gt;Test connection&lt;/a&gt;' +
+			(live ? ' &amp;middot; &lt;a href=&quot;x_ddb_setup_check.do&quot;&gt;Run without connection test&lt;/a&gt;' : '') + '&lt;/p&gt;&lt;/div&gt;';
+	},
+
+	type: 'SetupCheck'
+};
+</script><sys_class_name>sys_script_include</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-10-05 00:05:11</sys_created_on><sys_id>1082b84ea61ffeefd2941d9523540f35</sys_id><sys_mod_count>0</sys_mod_count><sys_name>SetupCheck</sys_name><sys_package display_value="Demo Data Builder" source="x_ddb">0041744e6783f451e50af1a2a681fa50</sys_package><sys_policy/><sys_scope display_value="Demo Data Builder">0041744e6783f451e50af1a2a681fa50</sys_scope><sys_update_name>sys_script_include_1082b84ea61ffeefd2941d9523540f35</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-10-05 00:05:11</sys_updated_on></sys_script_include></record_update>

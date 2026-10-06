@@ -4,25 +4,29 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const { loadApp, ROOT } = require('../build/lib/source');
-const { buildUpdateSet } = require('../build/lib/updateset');
+const { buildApp } = require('../build/lib/updateset');
 const { checkWellFormed } = require('../build/lib/xmlcheck');
+const { outputs, SC_DIR } = require('../build/build');
 
 const src = loadApp();
-const built = buildUpdateSet(src);
+const built = buildApp(src);
 
 test('update set and every payload are well-formed XML', () => {
 	checkWellFormed(built.xml);
 	built.updates.forEach((u) => checkWellFormed(u.payload, u.name));
 });
 
-test('committed dist file matches the source (run npm run build)', () => {
-	const file = path.join(ROOT, 'dist', 'ddb-' + src.app.version + '.xml');
-	assert.ok(fs.existsSync(file), 'dist file missing');
-	assert.ok(fs.readFileSync(file, 'utf8') === built.xml, 'dist/ddb-' + src.app.version + '.xml is stale; run npm run build');
+test('committed generated files match the source (run npm run build)', () => {
+	const files = outputs(src, built);
+	const stale = Object.keys(files).filter((f) => {
+		const abs = path.join(ROOT, f);
+		return !fs.existsSync(abs) || fs.readFileSync(abs, 'utf8') !== files[f];
+	});
+	assert.deepEqual(stale, [], 'stale generated files; run npm run build');
 });
 
 test('build output is deterministic', () => {
-	assert.equal(buildUpdateSet(loadApp()).xml, built.xml);
+	assert.equal(buildApp(loadApp()).xml, built.xml);
 });
 
 test('update set contains the app, every table, column, Script Include and record', () => {
@@ -90,4 +94,42 @@ test('table definitions are sane', () => {
 				c.choices.forEach((ch) => assert.ok(ch[0].length <= (c.max_length || 40), t.name + '.' + c.name + ' choice too long'));
 		});
 	});
+});
+
+test('Studio source-control layout has what Import From Source Control looks for', () => {
+	const props = fs.readFileSync(path.join(ROOT, 'sn_source_control.properties'), 'utf8');
+	assert.match(props, new RegExp('^path=/' + SC_DIR + '$', 'm'));
+	const sc = built.sourceControl;
+	assert.ok(sc['sys_app_' + built.appId + '.xml'], 'application file at the app path root');
+	assert.match(sc['sys_app_' + built.appId + '.xml'], /<record_update table="sys_app"><sys_app action="INSERT_OR_UPDATE">.*<scope>x_ddb<\/scope>/);
+	assert.ok(sc['checksum.txt']);
+	built.updates.filter((u) => u.table !== 'sys_app').forEach((u) => {
+		assert.equal(sc['update/' + u.name + '.xml'], u.payload + '\n', u.name);
+	});
+	src.tables.forEach((t) => {
+		const db = sc['dictionary/' + t.name + '.xml'];
+		checkWellFormed(db, t.name);
+		assert.match(db, new RegExp('<element label="[^"]+" max_length="40" name="' + t.name + '" type="collection">'));
+		t.columns.forEach((c) => assert.match(db, new RegExp(' name="' + c.name + '" '), t.name + '.' + c.name));
+	});
+	const allowed = /^(sys_app_[0-9a-f]{32}\.xml|checksum\.txt|update\/[a-z0-9_]+\.xml|dictionary\/x_ddb_[a-z_]+\.xml)$/;
+	Object.keys(sc).forEach((f) => assert.match(f, allowed));
+});
+
+test('payloads use the shapes Studio exports', () => {
+	const byName = {};
+	built.updates.forEach((u) => { byName[u.name] = u.payload; });
+	assert.match(byName.sys_dictionary_x_ddb_scenario_null, /^<\?xml[^>]*\?><record_update><sys_dictionary action="INSERT_OR_UPDATE" element="" table="x_ddb_scenario">/);
+	assert.match(byName.sys_dictionary_x_ddb_scenario_name, /<record_update><sys_dictionary action="INSERT_OR_UPDATE" element="name" table="x_ddb_scenario">/);
+	assert.match(byName.sys_documentation_x_ddb_scenario_name_en,
+		/<record_update><sys_documentation element="name" label="Name" language="en" table="x_ddb_scenario"><sys_documentation action="INSERT_OR_UPDATE">/);
+	assert.match(byName.sys_documentation_x_ddb_scenario__en, /<sys_documentation element="" label="Scenario"/);
+	const choices = byName.sys_choice_x_ddb_scenario_size_tier;
+	assert.match(choices, /<record_update><sys_choice action="INSERT_OR_UPDATE" field="size_tier" table="x_ddb_scenario" version="1">/);
+	assert.equal((choices.match(/<sys_choice action="INSERT_OR_UPDATE">/g) || []).length, 4);
+	const acl = built.updates.find((u) => u.table === 'sys_security_acl').payload;
+	assert.match(acl, /<operation display_value="read">read<\/operation>/);
+	assert.match(acl, /<type display_value="record">record<\/type>/);
+	const app = byName['sys_app_' + built.appId];
+	assert.ok(!/<sys_scope/.test(app), 'the application record does not reference a scope');
 });

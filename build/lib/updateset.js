@@ -1,8 +1,16 @@
 'use strict';
-// Generates a ServiceNow update set (unload XML) containing the scoped application.
+// Generates the scoped application in two forms from the same records:
+//   - an update set (unload XML) for System Update Sets > Import Update Set from XML
+//   - a Studio source-control layout (sys_app_<id>.xml, update/, dictionary/) for
+//     Studio > Import From Source Control
+//
+// Payload shapes follow files exported by ServiceNow Studio: plain records use
+// <record_update table="T"><T action="INSERT_OR_UPDATE">; dictionary entries use
+// <record_update><sys_dictionary element="E" table="T">; field labels and choice lists
+// use the grouped sys_documentation and sys_choice wrappers.
 //
 // Every record gets a deterministic sys_id (md5 of a stable key) so rebuilding gives the
-// same file and re-importing updates records in place. Updates are timestamped in
+// same output and re-importing updates records in place. Updates are timestamped in
 // dependency order (app, tables, columns, then everything else).
 
 const crypto = require('crypto');
@@ -19,27 +27,38 @@ function esc(value) {
 		.replace(/"/g, '&quot;');
 }
 
+function attrs(map) {
+	return Object.keys(map).map((k) => ' ' + k + '="' + esc(map[k]) + '"').join('');
+}
+
+const XML_DECL = '<?xml version="1.0" encoding="UTF-8"?>';
+
 const TYPE_MAP = {
 	string: 'string', choice: 'string', integer: 'integer', boolean: 'boolean', reference: 'reference',
 	glide_date_time: 'glide_date_time', decimal: 'decimal', password2: 'password2'
 };
 
+const DEFAULT_LENGTH = {
+	string: 255, choice: 40, reference: 32, integer: 40, boolean: 40, decimal: 15, glide_date_time: 40, password2: 255
+};
+
 const UPDATE_TYPES = {
 	sys_app: 'Application', sys_db_object: 'Table', sys_dictionary: 'Dictionary', sys_documentation: 'Field Label',
-	sys_choice: 'Choice', sys_script_include: 'Script Include', sys_ui_action: 'UI Action', sys_ui_page: 'UI Page',
+	sys_choice: 'Choice List', sys_script_include: 'Script Include', sys_ui_action: 'UI Action', sys_ui_page: 'UI Page',
 	sys_script: 'Business Rule', sysevent_register: 'Event Registration', sysevent_script_action: 'Script Action',
 	sysauto_script: 'Scheduled Script Execution', sys_properties: 'System Property', sys_user_role: 'Role',
 	sys_user_role_contains: 'Contains Role', sys_app_application: 'Application Menu', sys_app_module: 'Module',
 	sys_scope_privilege: 'Cross scope privilege', sys_security_acl: 'Access Control', sys_security_acl_role: 'Access Role'
 };
 
-class UpdateSetBuilder {
+class AppBuilder {
 	constructor(app) {
 		this.app = app;
 		this.scope = app.scope;
 		this.appId = this.id('sys_app', app.scope);
 		this.remoteId = this.id('sys_remote_update_set', app.scope + '@' + app.version);
 		this.updates = [];
+		this.tables = [];
 		this.seq = 0;
 		this.baseTime = Date.parse(app.build_timestamp.replace(' ', 'T') + 'Z');
 	}
@@ -63,146 +82,230 @@ class UpdateSetBuilder {
 	}
 
 	/**
-	 * Add one record.
-	 * @param {string} table
-	 * @param {string} sysId
-	 * @param {Object} fields  field -> value (strings, numbers, booleans)
-	 * @param {Object} opts { updateName, targetName, attrs }
+	 * XML for one record's fields plus system fields, sorted by name.
+	 * @param {Object} opts { scoped: add sys_scope/sys_package, updateName, sysName, created }
 	 */
-	add(table, sysId, fields, opts) {
-		opts = opts || {};
-		const created = this.timestamp(this.seq++);
-		const updateName = opts.updateName || table + '_' + sysId;
-		const appLabel = esc(this.app.name);
-		const sysFields = {
+	recordBody(table, sysId, fields, opts) {
+		const sys = {
 			sys_class_name: table,
 			sys_id: sysId,
 			sys_created_by: 'admin',
-			sys_created_on: created,
+			sys_created_on: opts.created,
 			sys_updated_by: 'admin',
-			sys_updated_on: created,
-			sys_mod_count: '0',
-			sys_update_name: updateName,
-			sys_name: opts.targetName || fields.name || fields.title || sysId,
-			sys_policy: ''
+			sys_updated_on: opts.created,
+			sys_mod_count: '0'
 		};
-		const body = [];
-		const all = Object.assign({}, fields, sysFields);
-		Object.keys(all).sort().forEach((name) => {
-			let value = this.resolve(all[name]);
+		if (opts.scoped !== false) {
+			sys.sys_update_name = opts.updateName;
+			sys.sys_name = opts.sysName;
+			sys.sys_policy = '';
+		}
+		const all = Object.assign({}, fields, sys);
+		if (opts.scoped !== false) {
+			all.sys_package = { attrs: { display_value: this.app.name, source: this.scope }, value: this.appId };
+			all.sys_scope = { attrs: { display_value: this.app.name }, value: this.appId };
+		}
+		return Object.keys(all).sort().map((name) => {
+			let value = all[name];
+			let at = '';
+			if (value && typeof value === 'object') {
+				at = attrs(value.attrs);
+				value = value.value;
+			}
+			value = this.resolve(value);
 			if (value === true)
 				value = 'true';
 			if (value === false)
 				value = 'false';
 			if (value === null || value === undefined || value === '')
-				body.push('<' + name + '/>');
-			else
-				body.push('<' + name + '>' + esc(value) + '</' + name + '>');
-		});
-		if (table !== 'sys_app') {
-			body.push('<sys_package display_value="' + appLabel + '" source="' + esc(this.scope) + '">' + this.appId + '</sys_package>');
-			body.push('<sys_scope display_value="' + appLabel + '">' + this.appId + '</sys_scope>');
-		}
-		const attrs = Object.keys(opts.attrs || {}).map((a) => ' ' + a + '="' + esc(opts.attrs[a]) + '"').join('');
-		const payload = '<?xml version="1.0" encoding="UTF-8"?><record_update table="' + esc(opts.recordTable || table) + '">' +
-			'<' + table + ' action="INSERT_OR_UPDATE"' + attrs + '>' + body.join('') + '</' + table + '></record_update>';
+				return '<' + name + at + '/>';
+			return '<' + name + at + '>' + esc(value) + '</' + name + '>';
+		}).join('');
+	}
 
-		this.updates.push({
+	push(u) {
+		this.updates.push(u);
+	}
+
+	nextTime() {
+		return this.timestamp(this.seq++);
+	}
+
+	/** A plain record: <record_update table="T"><T action="INSERT_OR_UPDATE">. */
+	add(table, sysId, fields, opts) {
+		opts = opts || {};
+		const created = this.nextTime();
+		const updateName = opts.updateName || table + '_' + sysId;
+		const sysName = opts.targetName || fields.name || fields.title || sysId;
+		const body = this.recordBody(table, sysId, fields, { created: created, updateName: updateName, sysName: sysName });
+		this.push({
 			name: updateName,
 			type: UPDATE_TYPES[table] || table,
-			targetName: opts.targetName || sysFields.sys_name,
-			table: opts.recordTable || table,
+			targetName: sysName,
+			table: table,
 			created: created,
-			payload: payload
+			payload: XML_DECL + '<record_update table="' + esc(table) + '"><' + table + ' action="INSERT_OR_UPDATE">' +
+				body + '</' + table + '></record_update>'
 		});
 		return sysId;
 	}
 
 	addApp() {
 		const a = this.app;
-		this.add('sys_app', this.appId, {
-			name: a.name,
-			scope: a.scope,
-			version: a.version,
-			short_description: a.short_description,
-			vendor: a.vendor,
+		const created = this.nextTime();
+		const body = this.recordBody('sys_app', this.appId, {
 			active: true,
+			enforce_license: 'log',
 			js_level: a.js_level || 'es_latest',
 			licensable: false,
+			license_model: 'none',
+			logo: '',
+			menu: '',
+			name: a.name,
 			private: false,
-			runtime_access_tracking: 'tracking',
-			sys_scope: this.appId,
-			sys_package: this.appId,
-			source: a.scope
-		}, { targetName: a.name });
+			restrict_table_access: false,
+			runtime_access_tracking: 'permissive',
+			scope: a.scope,
+			scoped_administration: false,
+			short_description: a.short_description,
+			source: a.scope,
+			sys_code: '',
+			template: '',
+			trackable: true,
+			user_role: '',
+			vendor: a.vendor,
+			vendor_prefix: '',
+			version: a.version
+		}, { created: created, scoped: false });
+		this.push({
+			name: 'sys_app_' + this.appId,
+			type: UPDATE_TYPES.sys_app,
+			targetName: a.name,
+			table: 'sys_app',
+			created: created,
+			payload: XML_DECL + '<record_update table="sys_app"><sys_app action="INSERT_OR_UPDATE">' + body + '</sys_app></record_update>'
+		});
 	}
 
 	addTable(t) {
-		const tableId = this.id('sys_db_object', t.name);
-		this.add('sys_db_object', tableId, {
-			name: t.name,
-			label: t.label,
-			is_extendable: false,
+		this.tables.push(t);
+		this.add('sys_db_object', this.id('sys_db_object', t.name), {
 			access: 'public',
-			read_access: true,
-			create_access: true,
-			update_access: true,
-			delete_access: true,
-			ws_access: true,
+			actions_access: false,
 			alter_access: false,
+			client_scripts_access: false,
+			configuration_access: false,
+			create_access: false,
 			create_access_controls: false,
+			delete_access: false,
+			is_extendable: false,
+			label: t.label,
+			live_feed_enabled: false,
+			name: t.name,
+			number_ref: '',
+			read_access: true,
+			super_class: '',
+			update_access: false,
 			user_role: '',
-			super_class: ''
+			ws_access: true
 		}, { targetName: t.label });
 
-		this.add('sys_dictionary', this.id('sys_dictionary', t.name + '.'), {
-			name: t.name,
-			element: '',
-			column_label: t.label,
-			internal_type: 'collection',
-			active: true,
-			comments: t.description || ''
-		}, { updateName: 'sys_dictionary_' + t.name + '_null', targetName: t.label, recordTable: t.name,
-			attrs: { element: 'NULL', table: t.name } });
-		this.add('sys_documentation', this.id('sys_documentation', t.name + '.'), {
-			name: t.name, element: '', label: t.label, plural: t.plural || t.label, language: 'en', hint: '', help: ''
-		}, { updateName: 'sys_documentation_' + t.name + '__en', targetName: t.label, recordTable: t.name });
-
-		t.columns.forEach((c) => this.addColumn(t, c));
+		this.addDictionary(t, null);
+		this.addDocumentation(t, null);
+		t.columns.forEach((c) => {
+			this.addDictionary(t, c);
+			this.addDocumentation(t, c);
+			if (c.choices)
+				this.addChoices(t, c);
+		});
 	}
 
-	addColumn(t, c) {
-		const type = TYPE_MAP[c.type];
-		if (!type)
-			throw new Error(t.name + '.' + c.name + ': unknown column type ' + c.type);
-		const maxLength = c.max_length || { string: 255, choice: 40, reference: 32, integer: 40, boolean: 40,
-			decimal: 15, glide_date_time: 40, password2: 255 }[c.type];
-		this.add('sys_dictionary', this.id('sys_dictionary', t.name + '.' + c.name), {
-			name: t.name,
-			element: c.name,
-			column_label: c.label,
-			internal_type: type,
-			max_length: String(maxLength),
-			reference: c.reference || '',
-			mandatory: !!c.mandatory,
-			read_only: !!c.read_only,
-			active: true,
-			display: t.display === c.name,
-			default_value: c.default === undefined ? '' : c.default,
-			choice: c.choices ? '1' : '',
-			comments: c.hint || ''
-		}, { updateName: 'sys_dictionary_' + t.name + '_' + c.name, targetName: c.label, recordTable: t.name,
-			attrs: { element: c.name, table: t.name } });
-		this.add('sys_documentation', this.id('sys_documentation', t.name + '.' + c.name), {
-			name: t.name, element: c.name, label: c.label, plural: c.label, language: 'en', hint: c.hint || '', help: ''
-		}, { updateName: 'sys_documentation_' + t.name + '_' + c.name + '_en', targetName: c.label, recordTable: t.name });
+	/** Dictionary entry; c = null for the table's collection entry. */
+	addDictionary(t, c) {
+		const element = c ? c.name : '';
+		const sysId = this.id('sys_dictionary', t.name + '.' + element);
+		const updateName = 'sys_dictionary_' + t.name + '_' + (c ? c.name : 'null');
+		const created = this.nextTime();
+		let fields;
+		if (!c) {
+			fields = {
+				active: true, array: false, attributes: '', audit: false, choice: '', column_label: '', comments: t.description || '',
+				default_value: '', display: false, element: '', internal_type: 'collection', mandatory: false, max_length: '40',
+				name: t.name, primary: false, read_only: false, reference: '', spell_check: false, text_index: false, unique: false,
+				virtual: false, xml_view: false
+			};
+		} else {
+			const type = TYPE_MAP[c.type];
+			if (!type)
+				throw new Error(t.name + '.' + c.name + ': unknown column type ' + c.type);
+			fields = {
+				active: true, array: false, attributes: '', audit: false,
+				choice: c.choices ? '1' : '',
+				column_label: c.label,
+				comments: c.hint || '',
+				default_value: c.default === undefined ? '' : c.default,
+				display: t.display === c.name,
+				element: c.name,
+				internal_type: type,
+				mandatory: !!c.mandatory,
+				max_length: String(c.max_length || DEFAULT_LENGTH[c.type]),
+				name: t.name,
+				primary: false,
+				read_only: !!c.read_only,
+				reference: c.reference || '',
+				spell_check: false, text_index: false, unique: false, virtual: false, xml_view: false
+			};
+		}
+		const sysName = c ? c.label : t.name;
+		const body = this.recordBody('sys_dictionary', sysId, fields, { created: created, updateName: updateName, sysName: sysName });
+		this.push({
+			name: updateName,
+			type: UPDATE_TYPES.sys_dictionary,
+			targetName: sysName,
+			table: t.name,
+			created: created,
+			payload: XML_DECL + '<record_update><sys_dictionary action="INSERT_OR_UPDATE"' + attrs({ element: element, table: t.name }) + '>' +
+				body + '</sys_dictionary></record_update>'
+		});
+	}
 
-		(c.choices || []).forEach((choice, i) => {
-			const sysId = this.id('sys_choice', t.name + '.' + c.name + '.' + choice[0]);
-			this.add('sys_choice', sysId, {
-				name: t.name, element: c.name, value: choice[0], label: choice[1], sequence: String((i + 1) * 10),
-				language: 'en', inactive: false
-			}, { targetName: choice[1] });
+	addDocumentation(t, c) {
+		const element = c ? c.name : '';
+		const label = c ? c.label : t.label;
+		const updateName = 'sys_documentation_' + t.name + '_' + element + '_en';
+		const created = this.nextTime();
+		const body = this.recordBody('sys_documentation', this.id('sys_documentation', t.name + '.' + element), {
+			element: element, help: '', hint: c ? (c.hint || '') : '', label: label, language: 'en', name: t.name,
+			plural: c ? label : (t.plural || label), url: '', url_target: ''
+		}, { created: created, updateName: updateName, sysName: label });
+		this.push({
+			name: updateName,
+			type: UPDATE_TYPES.sys_documentation,
+			targetName: label,
+			table: t.name,
+			created: created,
+			payload: XML_DECL + '<record_update><sys_documentation' + attrs({ element: element, label: label, language: 'en', table: t.name }) + '>' +
+				'<sys_documentation action="INSERT_OR_UPDATE">' + body + '</sys_documentation></sys_documentation></record_update>'
+		});
+	}
+
+	/** One choice list per field, as Studio stores it. */
+	addChoices(t, c) {
+		const updateName = 'sys_choice_' + t.name + '_' + c.name;
+		const created = this.nextTime();
+		const inner = c.choices.map((choice, i) => '<sys_choice action="INSERT_OR_UPDATE">' +
+			this.recordBody('sys_choice', this.id('sys_choice', t.name + '.' + c.name + '.' + choice[0]), {
+				dependent_value: '', element: c.name, hint: '', inactive: false, label: choice[1], language: 'en',
+				name: t.name, sequence: String((i + 1) * 10), sys_domain: 'global', sys_domain_path: '/', value: choice[0]
+			}, { created: created, scoped: false }) + '</sys_choice>').join('');
+		this.push({
+			name: updateName,
+			type: UPDATE_TYPES.sys_choice,
+			targetName: c.label,
+			table: t.name,
+			created: created,
+			payload: XML_DECL + '<record_update><sys_choice action="INSERT_OR_UPDATE"' + attrs({ field: c.name, table: t.name, version: '1' }) + '>' +
+				inner + '</sys_choice></record_update>'
 		});
 	}
 
@@ -214,32 +317,34 @@ class UpdateSetBuilder {
 		const roles = { read: t.read_role || 'user', create: 'admin', write: 'admin', delete: 'admin' };
 		Object.keys(roles).forEach((op) => {
 			const aclId = this.id('sys_security_acl', t.name + ':' + op);
+			const roleName = this.scope + '.' + roles[op];
 			this.add('sys_security_acl', aclId, {
-				name: t.name,
-				operation: op,
-				type: 'record',
-				decision_type: 'allow',
 				active: true,
 				admin_overrides: true,
 				advanced: false,
-				description: 'Demo Data Builder: ' + op + ' requires x_ddb.' + roles[op]
-			}, { targetName: t.name + ' ' + op });
+				condition: '',
+				description: 'Demo Data Builder: ' + op + ' requires ' + roleName,
+				name: t.name,
+				operation: { attrs: { display_value: op }, value: op },
+				script: '',
+				type: { attrs: { display_value: 'record' }, value: 'record' }
+			}, { targetName: t.name });
 			this.add('sys_security_acl_role', this.id('sys_security_acl_role', t.name + ':' + op), {
-				sys_security_acl: aclId,
-				sys_user_role: '@ref:sys_user_role:' + roles[op]
-			}, { targetName: t.name + ' ' + op + ' x_ddb.' + roles[op] });
+				sys_security_acl: { attrs: { display_value: t.name }, value: aclId },
+				sys_user_role: { attrs: { display_value: roleName, name: roleName }, value: '@ref:sys_user_role:' + roles[op] }
+			}, { targetName: t.name + '.' + roleName });
 		});
 	}
 
 	addScriptInclude(si) {
 		this.add('sys_script_include', this.id('sys_script_include', si.name), {
-			name: si.name,
-			api_name: this.scope + '.' + si.name,
 			access: si.access,
 			active: true,
-			client_callable: false,
+			api_name: this.scope + '.' + si.name,
 			caller_access: '',
+			client_callable: false,
 			description: si.description,
+			name: si.name,
 			script: si.script
 		}, { targetName: si.name });
 	}
@@ -250,13 +355,13 @@ class UpdateSetBuilder {
 
 	addPromptTemplate(p) {
 		this.add('x_ddb_prompt_template', this.id('rec', 'x_ddb_prompt_template:' + p.name + '@' + p.version), {
-			name: p.name,
-			version: String(p.version),
 			active: true,
-			purpose: p.purpose,
 			description: p.description,
+			name: p.name,
+			purpose: p.purpose,
 			system_text: p.system,
-			user_text: p.user
+			user_text: p.user,
+			version: String(p.version)
 		}, { targetName: p.name + ' v' + p.version });
 	}
 
@@ -265,25 +370,49 @@ class UpdateSetBuilder {
 			g.tables.forEach((table) => {
 				g.operations.forEach((op) => {
 					this.add('sys_scope_privilege', this.id('sys_scope_privilege', table + ':' + op), {
-						source_scope: this.appId,
-						target_scope: 'global',
-						target_name: table,
-						target_type: 'sys_db_object',
 						operation: op,
-						status: 'allowed'
-					}, { targetName: table + ' ' + op });
+						source_scope: { attrs: { display_value: this.app.name }, value: this.appId },
+						status: 'allowed',
+						target_name: table,
+						target_scope: { attrs: { display_value: 'Global' }, value: 'global' },
+						target_type: 'sys_db_object'
+					}, { targetName: table });
 				});
 			});
 		});
 	}
 
-	toXml() {
+	/** <database> table definition, as Studio writes to dictionary/<table>.xml. */
+	databaseXml(t) {
+		const cols = t.columns.map((c) => {
+			const a = { label: c.label, max_length: String(c.max_length || DEFAULT_LENGTH[c.type]), name: c.name, type: TYPE_MAP[c.type] };
+			if (t.display === c.name)
+				a.display = 'true';
+			if (c.mandatory)
+				a.mandatory = 'true';
+			if (c.read_only)
+				a.read_only = 'true';
+			if (c.reference)
+				a.reference = c.reference;
+			if (c.choices)
+				a.choice = '1';
+			if (c.default !== undefined)
+				a.default = c.default;
+			const ordered = {};
+			Object.keys(a).sort().forEach((k) => { ordered[k] = a[k]; });
+			return '        <element' + attrs(ordered) + '/>';
+		});
+		return XML_DECL + '\n<database>\n    <element' + attrs({ label: t.label, max_length: '40', name: t.name, type: 'collection' }) + '>\n' +
+			cols.join('\n') + '\n    </element>\n</database>\n';
+	}
+
+	toUpdateSetXml() {
 		const a = this.app;
 		const ts = this.timestamp(0);
-		const out = ['<?xml version="1.0" encoding="UTF-8"?>', '<unload unload_date="' + ts + '">'];
-		const field = (name, value, attrs) => {
-			const at = attrs ? Object.keys(attrs).map((k) => ' ' + k + '="' + esc(attrs[k]) + '"').join('') : '';
-			return value === '' || value === null || value === undefined ? '<' + name + at + '/>' : '<' + name + at + '>' + esc(value) + '</' + name + '>';
+		const out = [XML_DECL, '<unload unload_date="' + ts + '">'];
+		const field = (name, value, at) => {
+			const x = at ? attrs(at) : '';
+			return value === '' || value === null || value === undefined ? '<' + name + x + '/>' : '<' + name + x + '>' + esc(value) + '</' + name + '>';
 		};
 		const setName = a.name + ' ' + a.version;
 		out.push('<sys_remote_update_set action="INSERT_OR_UPDATE">' + [
@@ -348,11 +477,31 @@ class UpdateSetBuilder {
 		out.push('</unload>');
 		return out.join('\n') + '\n';
 	}
+
+	/**
+	 * Files for a Studio source-control repository, relative to the app path:
+	 * sys_app_<id>.xml, update/<update name>.xml, dictionary/<table>.xml, checksum.txt.
+	 */
+	toSourceControlFiles() {
+		const files = {};
+		this.updates.forEach((u) => {
+			const file = u.table === 'sys_app' ? u.name + '.xml' : 'update/' + u.name + '.xml';
+			files[file] = u.payload + '\n';
+		});
+		this.tables.forEach((t) => {
+			files['dictionary/' + t.name + '.xml'] = this.databaseXml(t);
+		});
+		// Studio compares this against its own checksum; a mismatch makes it validate the files.
+		const hash = crypto.createHash('sha256');
+		Object.keys(files).sort().forEach((f) => hash.update(f + '\n' + files[f]));
+		files['checksum.txt'] = hash.digest('hex') + '\n';
+		return files;
+	}
 }
 
-/** Build the full update set XML from loadApp() output. */
-function buildUpdateSet(src) {
-	const b = new UpdateSetBuilder(src.app);
+/** Build both outputs from loadApp() output. */
+function buildApp(src) {
+	const b = new AppBuilder(src.app);
 	b.addApp();
 	src.tables.forEach((t) => b.addTable(t));
 	src.scriptIncludes.forEach((si) => b.addScriptInclude(si));
@@ -366,7 +515,13 @@ function buildUpdateSet(src) {
 			throw new Error('Duplicate update name ' + u.name);
 		names[u.name] = true;
 	});
-	return { xml: b.toXml(), updates: b.updates, appId: b.appId };
+	return {
+		xml: b.toUpdateSetXml(),
+		sourceControl: b.toSourceControlFiles(),
+		updates: b.updates,
+		appId: b.appId,
+		tables: b.tables
+	};
 }
 
-module.exports = { buildUpdateSet, UpdateSetBuilder, esc, md5 };
+module.exports = { buildApp, buildUpdateSet: buildApp, AppBuilder, esc, md5 };

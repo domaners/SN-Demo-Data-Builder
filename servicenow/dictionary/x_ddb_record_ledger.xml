@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<database>
+    <element label="Record Ledger" max_length="40" name="x_ddb_record_ledger" type="collection">
+        <element label="Scenario" max_length="32" name="scenario" reference="x_ddb_scenario" type="reference"/>
+        <element label="Created by job" max_length="32" name="job" reference="x_ddb_generation_job" type="reference"/>
+        <element label="Last updated by job" max_length="32" name="last_job" reference="x_ddb_generation_job" type="reference"/>
+        <element label="Table" max_length="80" name="table_name" type="string"/>
+        <element display="true" label="Record sys_id" max_length="32" name="document_id" type="string"/>
+        <element choice="1" label="Domain" max_length="20" name="domain" type="string"/>
+        <element choice="1" label="Action" max_length="20" name="action" type="string"/>
+        <element label="Blueprint key" max_length="255" name="blueprint_key" type="string"/>
+    </element>
+</database>

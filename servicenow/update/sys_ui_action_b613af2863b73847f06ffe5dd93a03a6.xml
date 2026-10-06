@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ui_action"><sys_ui_action action="INSERT_OR_UPDATE"><action_name>x_ddb_approve_blueprint</action_name><active>true</active><client>false</client><condition>gs.hasRole('x_ddb.admin') &amp;&amp; current.getValue('state') == 'valid'</condition><form_button>true</form_button><name>Approve</name><order>130</order><script>(function () {
+	try {
+		new BlueprintService().approve(current);
+		gs.addInfoMessage('Blueprint approved. Click Build Foundation Data to create the records.');
+	} catch (e) {
+		gs.addErrorMessage(e.message);
+	}
+	action.setRedirectURL(current);
+})();
+</script><show_insert>false</show_insert><show_update>true</show_update><sys_class_name>sys_ui_action</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-10-05 00:05:39</sys_created_on><sys_id>b613af2863b73847f06ffe5dd93a03a6</sys_id><sys_mod_count>0</sys_mod_count><sys_name>Approve</sys_name><sys_package display_value="Demo Data Builder" source="x_ddb">0041744e6783f451e50af1a2a681fa50</sys_package><sys_policy/><sys_scope display_value="Demo Data Builder">0041744e6783f451e50af1a2a681fa50</sys_scope><sys_update_name>sys_ui_action_b613af2863b73847f06ffe5dd93a03a6</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-10-05 00:05:39</sys_updated_on><table>x_ddb_blueprint</table></sys_ui_action></record_update>

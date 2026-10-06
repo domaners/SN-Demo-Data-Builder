@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<database>
+    <element label="Directory Group" max_length="40" name="x_ddb_dir_group" type="collection">
+        <element label="Scenario" max_length="32" name="scenario" reference="x_ddb_scenario" type="reference"/>
+        <element label="distinguishedName" max_length="512" name="dn" type="string"/>
+        <element label="objectGUID" max_length="40" name="objectguid" type="string"/>
+        <element display="true" label="cn" max_length="200" name="cn" type="string"/>
+        <element label="description" max_length="1000" name="description" type="string"/>
+        <element label="groupType" max_length="40" name="grouptype" type="string"/>
+        <element label="managedBy" max_length="512" name="managedby" type="string"/>
+        <element label="member" max_length="65000" name="member" type="string"/>
+        <element label="extensionAttribute1 (group key)" max_length="100" name="extensionattribute1" type="string"/>
+    </element>
+</database>

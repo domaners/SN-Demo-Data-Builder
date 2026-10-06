@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ui_action"><sys_ui_action action="INSERT_OR_UPDATE"><action_name>x_ddb_repair_blueprint</action_name><active>true</active><client>false</client><condition>gs.hasRole('x_ddb.admin') &amp;&amp; current.getValue('state') == 'invalid'</condition><form_button>true</form_button><hint>Send the validation errors to the LLM and regenerate the affected sections</hint><name>Repair with Claude</name><order>110</order><script>(function () {
+	try {
+		const errors = (current.getValue('validation_errors') || '').split('\n').filter(function (l) { return l; });
+		const sections = BlueprintService.sectionsForErrors(errors);
+		if (!sections.length) {
+			gs.addErrorMessage('Could not tell which sections the errors belong to. Edit the JSON by hand.');
+			action.setRedirectURL(current);
+			return;
+		}
+		const scenario = new GlideRecord('x_ddb_scenario');
+		scenario.get(current.getValue('scenario'));
+		const job = GenerationJob.start('repair', scenario, current, { sections: sections });
+		gs.addInfoMessage('Repairing section(s): ' + sections.join(', '));
+		action.setRedirectURL(job);
+	} catch (e) {
+		gs.addErrorMessage(e.message);
+		action.setRedirectURL(current);
+	}
+})();
+</script><show_insert>false</show_insert><show_update>true</show_update><sys_class_name>sys_ui_action</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-10-05 00:05:37</sys_created_on><sys_id>20581ab029856e642b26b7fe4260e6e5</sys_id><sys_mod_count>0</sys_mod_count><sys_name>Repair with Claude</sys_name><sys_package display_value="Demo Data Builder" source="x_ddb">0041744e6783f451e50af1a2a681fa50</sys_package><sys_policy/><sys_scope display_value="Demo Data Builder">0041744e6783f451e50af1a2a681fa50</sys_scope><sys_update_name>sys_ui_action_20581ab029856e642b26b7fe4260e6e5</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-10-05 00:05:37</sys_updated_on><table>x_ddb_blueprint</table></sys_ui_action></record_update>

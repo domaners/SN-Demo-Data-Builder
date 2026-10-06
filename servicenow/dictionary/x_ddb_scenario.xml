@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<database>
+    <element label="Scenario" max_length="40" name="x_ddb_scenario" type="collection">
+        <element display="true" label="Name" mandatory="true" max_length="100" name="name" type="string"/>
+        <element label="Industry" mandatory="true" max_length="200" name="industry" type="string"/>
+        <element label="Company name" max_length="100" name="company_name" type="string"/>
+        <element choice="1" default="medium" label="Size" max_length="20" name="size_tier" type="string"/>
+        <element label="Custom headcount" max_length="40" name="headcount" type="integer"/>
+        <element label="Regions" max_length="400" name="regions" type="string"/>
+        <element label="Additional instructions" max_length="4000" name="instructions" type="string"/>
+        <element label="Seed" max_length="40" name="seed" type="string"/>
+        <element choice="1" default="draft" label="State" max_length="40" name="state" read_only="true" type="string"/>
+        <element label="Approved blueprint" max_length="32" name="active_blueprint" read_only="true" reference="x_ddb_blueprint" type="reference"/>
+        <element label="Last job" max_length="32" name="last_job" read_only="true" reference="x_ddb_generation_job" type="reference"/>
+    </element>
+</database>

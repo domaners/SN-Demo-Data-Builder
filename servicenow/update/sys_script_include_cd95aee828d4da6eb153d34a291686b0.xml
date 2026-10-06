@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include"><sys_script_include action="INSERT_OR_UPDATE"><access>package_private</access><active>true</active><api_name>x_ddb.Guard</api_name><caller_access/><client_callable>false</client_callable><description>Safety checks that every DDB entry point calls before writing data.</description><name>Guard</name><script>/**
+ * Safety checks that every DDB entry point calls before writing data.
+ *
+ * @access package_private
+ */
+var Guard = Class.create();
+
+Guard.ADMIN_ROLE = 'x_ddb.admin';
+
+/** Returns null when it is safe to run, otherwise a reason string. */
+Guard.whyBlocked = function () {
+	if (gs.getProperty('glide.installation.production', 'false') === 'true')
+		return 'This instance is marked as production (glide.installation.production = true). Demo Data Builder will not run here.';
+	const allowed = (gs.getProperty('x_ddb.allowed_instances', '') || '').trim();
+	if (allowed) {
+		const instance = gs.getProperty('instance_name', '');
+		const list = allowed.split(',').map(function (s) { return s.trim().toLowerCase(); });
+		if (list.indexOf(String(instance).toLowerCase()) &lt; 0)
+			return 'Instance &quot;' + instance + '&quot; is not listed in x_ddb.allowed_instances.';
+	}
+	return null;
+};
+
+Guard.assertNonProduction = function () {
+	const reason = Guard.whyBlocked();
+	if (reason)
+		throw new Error(reason);
+};
+
+Guard.isAdmin = function () {
+	return gs.hasRole(Guard.ADMIN_ROLE);
+};
+
+Guard.assertAdmin = function () {
+	if (!Guard.isAdmin())
+		throw new Error('The ' + Guard.ADMIN_ROLE + ' role is required.');
+};
+
+Guard.prototype = {
+	initialize: function () {},
+	type: 'Guard'
+};
+</script><sys_class_name>sys_script_include</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-10-05 00:04:55</sys_created_on><sys_id>cd95aee828d4da6eb153d34a291686b0</sys_id><sys_mod_count>0</sys_mod_count><sys_name>Guard</sys_name><sys_package display_value="Demo Data Builder" source="x_ddb">0041744e6783f451e50af1a2a681fa50</sys_package><sys_policy/><sys_scope display_value="Demo Data Builder">0041744e6783f451e50af1a2a681fa50</sys_scope><sys_update_name>sys_script_include_cd95aee828d4da6eb153d34a291686b0</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-10-05 00:04:55</sys_updated_on></sys_script_include></record_update>

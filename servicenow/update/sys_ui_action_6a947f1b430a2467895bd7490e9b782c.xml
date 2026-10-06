@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ui_action"><sys_ui_action action="INSERT_OR_UPDATE"><action_name>x_ddb_reset_job</action_name><active>true</active><client>true</client><condition>gs.hasRole('x_ddb.admin') &amp;&amp; current.getValue('type') == 'build' &amp;&amp; ['complete', 'failed', 'cancelled'].indexOf(current.getValue('state')) &gt;= 0</condition><form_button>true</form_button><hint>Delete the records this build created</hint><name>Reset Data From This Job</name><onclick>ddbConfirmResetJob()</onclick><order>900</order><script>function ddbConfirmResetJob() {
+	if (!confirm('Delete every record this build created?'))
+		return false;
+	gsftSubmit(null, g_form.getFormElement(), 'x_ddb_reset_job');
+}
+
+if (typeof window == 'undefined')
+	ddbResetJobServer();
+
+function ddbResetJobServer() {
+	try {
+		const scenario = new GlideRecord('x_ddb_scenario');
+		scenario.get(current.getValue('scenario'));
+		const job = GenerationJob.start('reset', scenario, null, { onlyJob: current.getUniqueValue() });
+		gs.addInfoMessage('Reset started in the background.');
+		action.setRedirectURL(job);
+	} catch (e) {
+		gs.addErrorMessage(e.message);
+		action.setRedirectURL(current);
+	}
+}
+</script><show_insert>false</show_insert><show_update>true</show_update><sys_class_name>sys_ui_action</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-10-05 00:05:43</sys_created_on><sys_id>6a947f1b430a2467895bd7490e9b782c</sys_id><sys_mod_count>0</sys_mod_count><sys_name>Reset Data From This Job</sys_name><sys_package display_value="Demo Data Builder" source="x_ddb">0041744e6783f451e50af1a2a681fa50</sys_package><sys_policy/><sys_scope display_value="Demo Data Builder">0041744e6783f451e50af1a2a681fa50</sys_scope><sys_update_name>sys_ui_action_6a947f1b430a2467895bd7490e9b782c</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-10-05 00:05:43</sys_updated_on><table>x_ddb_generation_job</table></sys_ui_action></record_update>

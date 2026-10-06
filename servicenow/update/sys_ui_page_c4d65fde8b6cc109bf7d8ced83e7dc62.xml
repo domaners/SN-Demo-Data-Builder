@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ui_page"><sys_ui_page action="INSERT_OR_UPDATE"><category>general</category><description>Demo Data Builder installation and configuration checks</description><endpoint>x_ddb_setup_check.do</endpoint><html>&lt;?xml version=&quot;1.0&quot; encoding=&quot;utf-8&quot; ?&gt;
+&lt;j:jelly trim=&quot;false&quot; xmlns:j=&quot;jelly:core&quot; xmlns:g=&quot;glide&quot; xmlns:j2=&quot;null&quot; xmlns:g2=&quot;null&quot;&gt;
+	&lt;g:evaluate var=&quot;jvar_html&quot;&gt;
+		var live = String(RP.getParameterValue('live')) == 'true';
+		var html;
+		try {
+			var check = new x_ddb.SetupCheck();
+			html = check.renderHtml(check.run(live), live);
+		} catch (e) {
+			html = 'Setup check could not run: ' + x_ddb.SetupCheck.escape(e.message);
+		}
+		html;
+	&lt;/g:evaluate&gt;
+	&lt;g:no_escape&gt;${jvar_html}&lt;/g:no_escape&gt;
+&lt;/j:jelly&gt;
+</html><name>setup_check</name><sys_class_name>sys_ui_page</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-10-05 00:05:44</sys_created_on><sys_id>c4d65fde8b6cc109bf7d8ced83e7dc62</sys_id><sys_mod_count>0</sys_mod_count><sys_name>setup_check</sys_name><sys_package display_value="Demo Data Builder" source="x_ddb">0041744e6783f451e50af1a2a681fa50</sys_package><sys_policy/><sys_scope display_value="Demo Data Builder">0041744e6783f451e50af1a2a681fa50</sys_scope><sys_update_name>sys_ui_page_c4d65fde8b6cc109bf7d8ced83e7dc62</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-10-05 00:05:44</sys_updated_on></sys_ui_page></record_update>

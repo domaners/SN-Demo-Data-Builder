@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include"><sys_script_include action="INSERT_OR_UPDATE"><access>package_private</access><active>true</active><api_name>x_ddb.ProviderFactory</api_name><caller_access/><client_callable>false</client_callable><description>Returns the configured LLM provider for a purpose (blueprint, narrative, repair). Picks the active x_ddb_provider_config whose purpose matches, falling back to one with purpose &quot;any&quot;. Lowest order wins. The API key is read lazily, only when a request is sent:   1. Connection &amp; Credential alias named in credential_alias (sys_alias id such as      &quot;x_ddb.anthropic&quot;, or its sys_id), API Key credential attribute &quot;api_key&quot;.   2. Otherwise the encrypted api_key field on the provider config.</description><name>ProviderFactory</name><script>/**
+ * Returns the configured LLM provider for a purpose (blueprint, narrative, repair).
+ *
+ * Picks the active x_ddb_provider_config whose purpose matches, falling back to one
+ * with purpose &quot;any&quot;. Lowest order wins.
+ *
+ * The API key is read lazily, only when a request is sent:
+ *   1. Connection &amp; Credential alias named in credential_alias (sys_alias id such as
+ *      &quot;x_ddb.anthropic&quot;, or its sys_id), API Key credential attribute &quot;api_key&quot;.
+ *   2. Otherwise the encrypted api_key field on the provider config.
+ *
+ * @access package_private
+ */
+var ProviderFactory = Class.create();
+
+ProviderFactory.TABLE = 'x_ddb_provider_config';
+
+ProviderFactory.IMPLEMENTATIONS = {
+	anthropic: function (config, keyFn) { return new AnthropicProvider(config, keyFn); }
+};
+
+ProviderFactory.findConfig = function (purpose) {
+	const wanted = [purpose, 'any'];
+	for (let i = 0; i &lt; wanted.length; i++) {
+		const gr = new GlideRecord(ProviderFactory.TABLE);
+		gr.addQuery('active', true);
+		gr.addQuery('purpose', wanted[i]);
+		gr.orderBy('order');
+		gr.setLimit(1);
+		gr.query();
+		if (gr.next())
+			return gr;
+	}
+	return null;
+};
+
+ProviderFactory.get = function (purpose) {
+	const gr = ProviderFactory.findConfig(purpose || 'any');
+	if (!gr)
+		throw LLMProvider.error('No active provider configuration for purpose &quot;' + purpose +
+			'&quot;. Create one under Demo Data Builder &gt; Providers.');
+	return ProviderFactory.fromRecord(gr);
+};
+
+ProviderFactory.fromRecord = function (gr) {
+	const config = LLMProvider.configFrom(gr);
+	const make = ProviderFactory.IMPLEMENTATIONS[config.provider];
+	if (!make)
+		throw LLMProvider.error('Provider &quot;' + config.provider + '&quot; is not implemented yet. Use &quot;anthropic&quot;.');
+	const sysId = gr.getUniqueValue();
+	const keyFn = function () { return ProviderFactory.resolveApiKey(sysId); };
+	return make(config, keyFn);
+};
+
+ProviderFactory.resolveApiKey = function (configSysId) {
+	const gr = new GlideRecord(ProviderFactory.TABLE);
+	if (!gr.get(configSysId))
+		return '';
+	const alias = gr.getValue('credential_alias');
+	if (alias) {
+		const key = ProviderFactory._keyFromAlias(alias);
+		if (key)
+			return key;
+	}
+	const element = gr.getElement('api_key');
+	return element ? (element.getDecryptedValue() || '') : '';
+};
+
+ProviderFactory._keyFromAlias = function (alias) {
+	try {
+		let aliasId = alias;
+		if (!/^[0-9a-f]{32}$/.test(alias)) {
+			const a = new GlideRecord('sys_alias');
+			a.addQuery('id', alias);
+			a.setLimit(1);
+			a.query();
+			if (!a.next())
+				return '';
+			aliasId = a.getUniqueValue();
+		}
+		const cred = new sn_cc.StandardCredentialsProvider().getCredentialByAliasID(aliasId);
+		return cred ? (cred.getAttribute('api_key') || '') : '';
+	} catch (e) {
+		gs.warn('[x_ddb] Could not read credential alias ' + alias + ': ' + e.message);
+		return '';
+	}
+};
+
+ProviderFactory.prototype = {
+	initialize: function () {},
+	type: 'ProviderFactory'
+};
+</script><sys_class_name>sys_script_include</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-10-05 00:04:59</sys_created_on><sys_id>0f2c3a5556ed4b4218c1132d8599e069</sys_id><sys_mod_count>0</sys_mod_count><sys_name>ProviderFactory</sys_name><sys_package display_value="Demo Data Builder" source="x_ddb">0041744e6783f451e50af1a2a681fa50</sys_package><sys_policy/><sys_scope display_value="Demo Data Builder">0041744e6783f451e50af1a2a681fa50</sys_scope><sys_update_name>sys_script_include_0f2c3a5556ed4b4218c1132d8599e069</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-10-05 00:04:59</sys_updated_on></sys_script_include></record_update>

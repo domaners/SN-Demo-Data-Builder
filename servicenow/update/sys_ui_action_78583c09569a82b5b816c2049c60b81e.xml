@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ui_action"><sys_ui_action action="INSERT_OR_UPDATE"><action_name>x_ddb_retry_job</action_name><active>true</active><client>false</client><condition>gs.hasRole('x_ddb.admin') &amp;&amp; ['failed', 'cancelled'].indexOf(current.getValue('state')) &gt;= 0</condition><form_button>true</form_button><name>Retry Job</name><order>110</order><script>(function () {
+	try {
+		GenerationJob.retry(current);
+		gs.addInfoMessage('Job re-queued from where it stopped.');
+	} catch (e) {
+		gs.addErrorMessage(e.message);
+	}
+	action.setRedirectURL(current);
+})();
+</script><show_insert>false</show_insert><show_update>true</show_update><sys_class_name>sys_ui_action</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-10-05 00:05:42</sys_created_on><sys_id>78583c09569a82b5b816c2049c60b81e</sys_id><sys_mod_count>0</sys_mod_count><sys_name>Retry Job</sys_name><sys_package display_value="Demo Data Builder" source="x_ddb">0041744e6783f451e50af1a2a681fa50</sys_package><sys_policy/><sys_scope display_value="Demo Data Builder">0041744e6783f451e50af1a2a681fa50</sys_scope><sys_update_name>sys_ui_action_78583c09569a82b5b816c2049c60b81e</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-10-05 00:05:42</sys_updated_on><table>x_ddb_generation_job</table></sys_ui_action></record_update>

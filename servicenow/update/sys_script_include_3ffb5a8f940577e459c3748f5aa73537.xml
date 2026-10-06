@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include"><sys_script_include action="INSERT_OR_UPDATE"><access>package_private</access><active>true</active><api_name>x_ddb.PromptLibrary</api_name><caller_access/><client_callable>false</client_callable><description>Prompt templates. Admins can override a template by creating an active x_ddb_prompt_template record with the same name and a higher version; otherwise the defaults bundled from app/prompts/*.md are used. Templates use {{variable}} placeholders.</description><name>PromptLibrary</name><script>/**
+ * Prompt templates. Admins can override a template by creating an active
+ * x_ddb_prompt_template record with the same name and a higher version; otherwise the
+ * defaults bundled from app/prompts/*.md are used.
+ *
+ * Templates use {{variable}} placeholders.
+ *
+ * @access package_private
+ */
+var PromptLibrary = Class.create();
+
+PromptLibrary.TABLE = 'x_ddb_prompt_template';
+PromptLibrary.DEFAULTS = {&quot;blueprint.repair&quot;:{&quot;name&quot;:&quot;blueprint.repair&quot;,&quot;purpose&quot;:&quot;repair&quot;,&quot;version&quot;:1,&quot;description&quot;:&quot;Fixes validation errors in one blueprint section.&quot;,&quot;system&quot;:&quot;You maintain blueprints: structured JSON descriptions of fictional companies that are expanded into\nServiceNow demo data. You will be given a complete blueprint, the name of one section, and a list of\nvalidation errors. Return a corrected version of that section only.\n\nRules\n- Fix every listed error. Keep everything else as close to the original as possible: same keys, names\n  and descriptions unless they are the cause of an error.\n- Every `*_key` field must reference a key that exists in the blueprint. If a reference points at\n  something missing, either point it at the most suitable existing item or add the missing item to\n  this section when it belongs here.\n- ci_class values must be CMDB classes that exist on a standard ServiceNow instance.\n- The company and its people are fictional; domains use the `.example` top-level domain.\n&quot;,&quot;user&quot;:&quot;Section to repair: \&quot;{{section_key}}\&quot; ({{section_label}})\n\nValidation errors:\n{{errors}}\n\nComplete blueprint:\n{{blueprint}}\n\nReturn only the corrected JSON object for the \&quot;{{section_key}}\&quot; section.\n&quot;},&quot;blueprint.section&quot;:{&quot;name&quot;:&quot;blueprint.section&quot;,&quot;purpose&quot;:&quot;blueprint&quot;,&quot;version&quot;:1,&quot;description&quot;:&quot;Generates one section of a company blueprint. The system text is identical for every section call so it is cached.&quot;,&quot;system&quot;:&quot;You design fictional but realistic companies for ServiceNow demo instances. Your output is a\n\&quot;blueprint\&quot;: structured JSON that a deterministic engine expands into thousands of ServiceNow\nrecords (users, groups, locations, CMDB configuration items, service maps, incidents, changes and\ncatalog requests). People evaluating software will look at this data, so it must feel like a real,\ncoherent organisation.\n\nYou are asked for one section of the blueprint at a time. Earlier sections are supplied as context;\nkeep every cross-reference consistent with them.\n\nGeneral rules\n- The company and every person in it are fictional. Never use real people, real brands, real\n  customers or real product names for the company itself. Common technology products (Windows Server,\n  PostgreSQL, Tomcat, Cisco, F5, VMware, AWS) are fine for infrastructure.\n- Use the `.example` top-level domain for every email domain, AD domain and URL\n  (for example `contoso-freight.example`, `corp.contoso-freight.example`).\n- Keys are short, lower-case, stable identifiers (`man-hq`, `it`, `sd`, `wms`). Every `*_key` field\n  must reference a key that exists in this or an earlier section. Use null where the schema allows it\n  and there is no parent.\n- Weights are relative shares between 0 and 1. Within one list they should roughly sum to 1.\n- Match spelling and tone to the headquarters country (UK English for a UK company).\n- Prefer depth over breadth: a handful of well-described items beats many shallow ones.\n\nSection guidance\n\norg (company, locations, departments)\n- company.short_code: 2-6 upper-case letters, used as a prefix in names.\n- Locations form a hierarchy: region -&gt; country (optional) -&gt; site -&gt; building (optional). Include at\n  least one datacenter (`is_datacenter: true`, `headcount_weight: 0`) and, if the company uses cloud,\n  a `cloud_region`. Timezones are IANA names (Europe/London).\n- Departments form a hierarchy under one root (usually Executive). Give each 3-6 realistic job titles,\n  most common first. IT must exist and contain the service desk, infrastructure, database, network and\n  application roles that the later sections need.\n\npeople (people, groups)\n- name_locales reflect where staff are based, weighted by headcount. Use BCP 47 tags (en-GB, nl-NL,\n  de-DE, fr-FR, es-ES, it-IT, pt-BR, en-IN, ja-JP, sv-SE, pl-PL, zh-CN, en-US).\n- username_pattern and email_pattern use the tokens {first}, {last}, {f}, {l}, {n}; email_pattern\n  also uses {domain}. ou_path uses {department} and {site}, e.g. `OU={department},OU=Users,OU={site}`.\n- named_users are the 6-12 personas a demo storyline needs: an executive with no manager (CEO or\n  CIO), the service desk manager, infrastructure and application leads, business owners for the main\n  applications, a change manager. Roles are ServiceNow role names such as `itil`, `itil_admin`,\n  `approver_user`, `catalog_admin`, `asset`; leave the list empty for non-IT staff.\n- groups cover IT assignment groups (service desk, server, database, network, application support\n  per major application), a Change Advisory Board (type approval), and catalog fulfilment groups.\n  member_department_keys is where members are drawn from. Assignment groups get the `itil` role.\n\napps (applications)\n- 4-8 applications that matter to this industry, from customer-facing to back-office. Each has 2-5\n  tiers. ci_class must be a real CMDB class name such as cmdb_ci_linux_server, cmdb_ci_win_server,\n  cmdb_ci_app_server_tomcat, cmdb_ci_app_server_iis, cmdb_ci_app_server_websphere,\n  cmdb_ci_db_mssql_instance, cmdb_ci_db_ora_instance, cmdb_ci_db_postgresql_instance,\n  cmdb_ci_db_mysql_instance, cmdb_ci_lb_bigip, cmdb_ci_lb, cmdb_ci_appl, cmdb_ci_server.\n- Owners are named_users keys, support groups are group keys, hosting locations are datacenter or\n  cloud_region keys. depends_on_keys must not form a cycle.\n\ninfra (infrastructure, catalog, themes)\n- hostname_pattern uses {site}, {env}, {role}, {app}, {n}. IP ranges are private CIDRs per location.\n- network_devices use classes such as cmdb_ci_ip_switch, cmdb_ci_ip_router, cmdb_ci_ip_firewall.\n- shared_services: directory, DNS, email, backup, monitoring and similar.\n- catalog: 6-12 items employees would really request in this company, with 1-4 variables each.\n  `choices` is empty unless type is `choice`.\n- themes: 5-8 recurring operational storylines (outages, degradations, user issues, capacity,\n  security, planned change), each tied to applications and tier roles where relevant, with concrete\n  symptoms users would report, a root cause and the fix.\n&quot;,&quot;user&quot;:&quot;Scenario\n- Industry: {{industry}}\n- Company name: {{company_name}}\n- Size: {{size_tier}} (about {{headcount}} staff)\n- Regions and countries: {{regions}}\n- Additional instructions from the demo builder: {{instructions}}\n\nBlueprint sections already generated:\n{{previous_sections}}\n\nNow produce the \&quot;{{section_key}}\&quot; section ({{section_label}}). Return only the JSON object for this\nsection.\n&quot;}};
+
+/** @returns {{name, version, system, user}} */
+PromptLibrary.get = function (name) {
+	const gr = new GlideRecord(PromptLibrary.TABLE);
+	gr.addQuery('name', name);
+	gr.addQuery('active', true);
+	gr.orderByDesc('version');
+	gr.setLimit(1);
+	gr.query();
+	const fallback = PromptLibrary.DEFAULTS ? PromptLibrary.DEFAULTS[name] : null;
+	if (gr.next()) {
+		const version = parseInt(gr.getValue('version'), 10) || 0;
+		if (!fallback || version &gt;= fallback.version) {
+			return {
+				name: name,
+				version: version,
+				system: gr.getValue('system_text') || '',
+				user: gr.getValue('user_text') || ''
+			};
+		}
+	}
+	if (!fallback)
+		throw new Error('Prompt template &quot;' + name + '&quot; not found');
+	return { name: name, version: fallback.version, system: fallback.system, user: fallback.user };
+};
+
+PromptLibrary.render = function (text, vars) {
+	return String(text).replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi, function (match, key) {
+		return vars.hasOwnProperty(key) &amp;&amp; vars[key] !== null &amp;&amp; vars[key] !== undefined ? String(vars[key]) : '';
+	});
+};
+
+PromptLibrary.prototype = {
+	initialize: function () {},
+	type: 'PromptLibrary'
+};
+</script><sys_class_name>sys_script_include</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-10-05 00:05:05</sys_created_on><sys_id>3ffb5a8f940577e459c3748f5aa73537</sys_id><sys_mod_count>0</sys_mod_count><sys_name>PromptLibrary</sys_name><sys_package display_value="Demo Data Builder" source="x_ddb">0041744e6783f451e50af1a2a681fa50</sys_package><sys_policy/><sys_scope display_value="Demo Data Builder">0041744e6783f451e50af1a2a681fa50</sys_scope><sys_update_name>sys_script_include_3ffb5a8f940577e459c3748f5aa73537</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-10-05 00:05:05</sys_updated_on></sys_script_include></record_update>

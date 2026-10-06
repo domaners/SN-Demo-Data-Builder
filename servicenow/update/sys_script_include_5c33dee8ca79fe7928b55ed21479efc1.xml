@@ -1,0 +1,285 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include"><sys_script_include action="INSERT_OR_UPDATE"><access>package_private</access><active>true</active><api_name>x_ddb.BlueprintValidator</api_name><caller_access/><client_callable>false</client_callable><description>Checks a blueprint before anything is written to the instance:   1. JSON Schema conformance   2. Referential integrity (every *_key points at something that exists, no cycles)   3. Platform fit (CI classes, roles and time zones exist on this instance)   4. Sanity (weights, counts, naming) Errors block a build; warnings are shown but do not.</description><name>BlueprintValidator</name><script>/**
+ * Checks a blueprint before anything is written to the instance:
+ *   1. JSON Schema conformance
+ *   2. Referential integrity (every *_key points at something that exists, no cycles)
+ *   3. Platform fit (CI classes, roles and time zones exist on this instance)
+ *   4. Sanity (weights, counts, naming)
+ *
+ * Errors block a build; warnings are shown but do not.
+ *
+ * @access package_private
+ */
+var BlueprintValidator = Class.create();
+
+/** Platform checks backed by the instance. Tests pass their own. */
+BlueprintValidator.instancePlatform = function () {
+	return {
+		isCmdbClass: function (name) {
+			if (!new GlideRecord(name).isValid())
+				return false;
+			const tables = new GlideTableHierarchy(name).getTables();
+			for (let i = 0; i &lt; tables.length; i++) {
+				if (String(tables[i]) === 'cmdb_ci')
+					return true;
+			}
+			return false;
+		},
+		roleExists: function (name) {
+			const gr = new GlideRecord('sys_user_role');
+			gr.addQuery('name', name);
+			gr.setLimit(1);
+			gr.query();
+			return gr.hasNext();
+		},
+		timezoneValid: function (tz) {
+			const gr = new GlideRecord('sys_choice');
+			gr.addQuery('name', 'sys_user');
+			gr.addQuery('element', 'time_zone');
+			gr.addQuery('value', tz);
+			gr.setLimit(1);
+			gr.query();
+			return gr.hasNext();
+		}
+	};
+};
+
+BlueprintValidator.prototype = {
+	/**
+	 * @param {Object} platform optional { isCmdbClass(name), roleExists(name), timezoneValid(tz) }
+	 */
+	initialize: function (platform) {
+		this.platform = platform || null;
+	},
+
+	/** @returns {{valid: boolean, errors: string[], warnings: string[]}} */
+	validate: function (bp) {
+		const errors = [];
+		const warnings = [];
+
+		const schemaErrors = new JsonSchemaValidator(50).validate(bp, BlueprintSchema.SCHEMA);
+		for (let i = 0; i &lt; schemaErrors.length; i++)
+			errors.push('Schema: ' + schemaErrors[i].path + ' ' + schemaErrors[i].message);
+		if (schemaErrors.length)
+			return { valid: false, errors: errors, warnings: warnings };
+
+		this._references(bp, errors, warnings);
+		this._sanity(bp, errors, warnings);
+		if (this.platform)
+			this._platform(bp, errors, warnings);
+
+		return { valid: errors.length === 0, errors: errors, warnings: warnings };
+	},
+
+	_index: function (list, label, errors) {
+		const idx = {};
+		for (let i = 0; i &lt; list.length; i++) {
+			const key = list[i].key;
+			if (idx[key])
+				errors.push(label + ': duplicate key &quot;' + key + '&quot;');
+			idx[key] = list[i];
+		}
+		return idx;
+	},
+
+	_ref: function (idx, key, where, target, errors, nullable) {
+		if (key === null || key === undefined || key === '') {
+			if (!nullable)
+				errors.push(where + ': missing ' + target + ' reference');
+			return;
+		}
+		if (!idx[key])
+			errors.push(where + ': unknown ' + target + ' &quot;' + key + '&quot;');
+	},
+
+	/** Detect cycles in a parent-pointer graph. getParents(item) -&gt; array of keys. */
+	_cycles: function (idx, getParents, label, errors) {
+		const state = {};
+		const self = this;
+		const visit = function (key, trail) {
+			if (state[key] === 2 || !idx[key])
+				return;
+			if (state[key] === 1) {
+				errors.push(label + ': cycle ' + trail.concat(key).join(' -&gt; '));
+				return;
+			}
+			state[key] = 1;
+			const parents = getParents(idx[key]) || [];
+			for (let i = 0; i &lt; parents.length; i++)
+				visit(parents[i], trail.concat(key));
+			state[key] = 2;
+		};
+		const keys = Object.keys(idx);
+		for (let k = 0; k &lt; keys.length; k++)
+			visit(keys[k], []);
+		return self;
+	},
+
+	_references: function (bp, errors, warnings) {
+		const loc = this._index(bp.locations, 'locations', errors);
+		const dept = this._index(bp.departments, 'departments', errors);
+		const users = this._index(bp.people.named_users, 'people.named_users', errors);
+		const groups = this._index(bp.groups, 'groups', errors);
+		const apps = this._index(bp.applications, 'applications', errors);
+		this._index(bp.catalog, 'catalog', errors);
+		this._index(bp.themes, 'themes', errors);
+		this._index(bp.infrastructure.shared_services, 'infrastructure.shared_services', errors);
+
+		bp.locations.forEach(function (l) {
+			this._ref(loc, l.parent_key, 'location &quot;' + l.key + '&quot;', 'parent location', errors, true);
+		}, this);
+		this._cycles(loc, function (l) { return l.parent_key ? [l.parent_key] : []; }, 'locations', errors);
+
+		bp.departments.forEach(function (d) {
+			this._ref(dept, d.parent_key, 'department &quot;' + d.key + '&quot;', 'parent department', errors, true);
+		}, this);
+		this._cycles(dept, function (d) { return d.parent_key ? [d.parent_key] : []; }, 'departments', errors);
+
+		bp.people.named_users.forEach(function (u) {
+			const where = 'named user &quot;' + u.key + '&quot;';
+			this._ref(dept, u.department_key, where, 'department', errors);
+			this._ref(loc, u.location_key, where, 'location', errors);
+			this._ref(users, u.manager_key, where, 'manager', errors, true);
+			if (loc[u.location_key] &amp;&amp; loc[u.location_key].is_datacenter)
+				warnings.push(where + ' is based in datacenter &quot;' + u.location_key + '&quot;');
+		}, this);
+		this._cycles(users, function (u) { return u.manager_key ? [u.manager_key] : []; }, 'named user managers', errors);
+
+		bp.groups.forEach(function (g) {
+			const where = 'group &quot;' + g.key + '&quot;';
+			this._ref(users, g.manager_key, where, 'manager (named user)', errors, true);
+			g.member_department_keys.forEach(function (k) {
+				this._ref(dept, k, where, 'member department', errors);
+			}, this);
+		}, this);
+
+		bp.applications.forEach(function (a) {
+			const where = 'application &quot;' + a.key + '&quot;';
+			this._ref(users, a.business_owner_key, where, 'business owner', errors);
+			this._ref(users, a.it_owner_key, where, 'IT owner', errors);
+			this._ref(groups, a.support_group_key, where, 'support group', errors);
+			a.tiers.forEach(function (t) {
+				this._ref(loc, t.hosting_location_key, where + ' tier ' + t.role, 'hosting location', errors);
+			}, this);
+			a.depends_on_keys.forEach(function (k) {
+				this._ref(apps, k, where, 'dependency', errors);
+			}, this);
+		}, this);
+		this._cycles(apps, function (a) { return a.depends_on_keys; }, 'application dependencies', errors);
+
+		const infra = bp.infrastructure;
+		infra.ip_ranges.forEach(function (r) {
+			this._ref(loc, r.location_key, 'ip range ' + r.cidr, 'location', errors);
+		}, this);
+		infra.virtualization.forEach(function (v) {
+			this._ref(loc, v.location_key, 'virtualization ' + v.platform, 'location', errors);
+		}, this);
+		infra.network_devices.forEach(function (n) {
+			this._ref(loc, n.location_key, 'network device ' + n.model, 'location', errors);
+		}, this);
+		infra.shared_services.forEach(function (s) {
+			this._ref(groups, s.support_group_key, 'shared service &quot;' + s.key + '&quot;', 'support group', errors);
+		}, this);
+		bp.catalog.forEach(function (c) {
+			this._ref(groups, c.fulfillment_group_key, 'catalog item &quot;' + c.key + '&quot;', 'fulfillment group', errors);
+		}, this);
+		bp.themes.forEach(function (t) {
+			t.application_keys.forEach(function (k) {
+				this._ref(apps, k, 'theme &quot;' + t.key + '&quot;', 'application', errors);
+			}, this);
+		}, this);
+	},
+
+	_sanity: function (bp, errors, warnings) {
+		if (!/^[A-Z]{2,6}$/.test(bp.company.short_code))
+			errors.push('company.short_code must be 2-6 upper-case letters (got &quot;' + bp.company.short_code + '&quot;)');
+
+		const offices = bp.locations.filter(function (l) { return !l.is_datacenter &amp;&amp; l.headcount_weight &gt; 0; });
+		if (!offices.length)
+			errors.push('locations: at least one non-datacenter location needs headcount_weight &gt; 0');
+
+		const staffed = bp.departments.filter(function (d) { return d.headcount_weight &gt; 0; });
+		if (!staffed.length)
+			errors.push('departments: at least one department needs headcount_weight &gt; 0');
+		bp.departments.forEach(function (d) {
+			if (d.headcount_weight &gt; 0 &amp;&amp; !d.job_titles.length)
+				errors.push('department &quot;' + d.key + '&quot; has staff but no job_titles');
+		});
+
+		[['locations', bp.locations], ['departments', bp.departments]].forEach(function (pair) {
+			let sum = 0;
+			pair[1].forEach(function (x) {
+				if (x.headcount_weight &lt; 0)
+					errors.push(pair[0] + ': negative headcount_weight on &quot;' + x.key + '&quot;');
+				sum += x.headcount_weight;
+			});
+			if (sum &gt; 0 &amp;&amp; Math.abs(sum - 1) &gt; 0.05)
+				warnings.push(pair[0] + ': headcount weights sum to ' + sum.toFixed(2) + ' (they will be normalised)');
+		});
+
+		if (!bp.people.name_locales.length)
+			errors.push('people.name_locales must not be empty');
+		bp.people.name_locales.forEach(function (l) {
+			if (!NameGenerator.supports(l.locale))
+				warnings.push('name locale &quot;' + l.locale + '&quot; is not bundled; ' + NameGenerator.DEFAULT_LOCALE + ' names will be used instead');
+		});
+		if (!/\{(first|f)\}/.test(bp.people.username_pattern) || !/\{(last|l)\}/.test(bp.people.username_pattern))
+			errors.push('people.username_pattern must contain a first-name token and a last-name token');
+		if (bp.people.email_pattern.indexOf('{domain}') &lt; 0)
+			errors.push('people.email_pattern must contain {domain}');
+
+		bp.groups.forEach(function (g) {
+			if (!g.member_department_keys.length)
+				warnings.push('group &quot;' + g.key + '&quot; has no member departments and will only contain its manager');
+		});
+
+		bp.applications.forEach(function (a) {
+			a.tiers.forEach(function (t) {
+				if (t.instance_count &lt; 1 || t.instance_count &gt; 50)
+					errors.push('application &quot;' + a.key + '&quot; tier ' + t.role + ': instance_count must be 1-50');
+			});
+		});
+	},
+
+	_platform: function (bp, errors, warnings) {
+		const p = this.platform;
+		const seenTz = {};
+		bp.locations.forEach(function (l) {
+			if (l.timezone &amp;&amp; !seenTz[l.timezone]) {
+				seenTz[l.timezone] = true;
+				if (!p.timezoneValid(l.timezone))
+					warnings.push('time zone &quot;' + l.timezone + '&quot; (location &quot;' + l.key + '&quot;) is not a sys_user time zone choice on this instance');
+			}
+		});
+
+		const seenRole = {};
+		const checkRole = function (role, where) {
+			if (seenRole[role] === undefined)
+				seenRole[role] = p.roleExists(role);
+			if (!seenRole[role])
+				warnings.push(where + ': role &quot;' + role + '&quot; does not exist on this instance and will be skipped');
+		};
+		bp.people.named_users.forEach(function (u) {
+			u.roles.forEach(function (r) { checkRole(r, 'named user &quot;' + u.key + '&quot;'); });
+		});
+		bp.groups.forEach(function (g) {
+			g.roles.forEach(function (r) { checkRole(r, 'group &quot;' + g.key + '&quot;'); });
+		});
+
+		const seenClass = {};
+		const checkClass = function (cls, where) {
+			if (seenClass[cls] === undefined)
+				seenClass[cls] = p.isCmdbClass(cls);
+			if (!seenClass[cls])
+				errors.push(where + ': &quot;' + cls + '&quot; is not a CMDB class on this instance');
+		};
+		bp.applications.forEach(function (a) {
+			a.tiers.forEach(function (t) { checkClass(t.ci_class, 'application &quot;' + a.key + '&quot; tier ' + t.role); });
+		});
+		bp.infrastructure.network_devices.forEach(function (n) {
+			checkClass(n.ci_class, 'network device ' + n.model);
+		});
+	},
+
+	type: 'BlueprintValidator'
+};
+</script><sys_class_name>sys_script_include</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-10-05 00:05:04</sys_created_on><sys_id>5c33dee8ca79fe7928b55ed21479efc1</sys_id><sys_mod_count>0</sys_mod_count><sys_name>BlueprintValidator</sys_name><sys_package display_value="Demo Data Builder" source="x_ddb">0041744e6783f451e50af1a2a681fa50</sys_package><sys_policy/><sys_scope display_value="Demo Data Builder">0041744e6783f451e50af1a2a681fa50</sys_scope><sys_update_name>sys_script_include_5c33dee8ca79fe7928b55ed21479efc1</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-10-05 00:05:04</sys_updated_on></sys_script_include></record_update>

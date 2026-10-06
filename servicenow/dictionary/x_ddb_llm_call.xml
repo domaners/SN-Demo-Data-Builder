@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<database>
+    <element label="LLM Call" max_length="40" name="x_ddb_llm_call" type="collection">
+        <element label="Job" max_length="32" name="job" reference="x_ddb_generation_job" type="reference"/>
+        <element label="Provider config" max_length="32" name="provider_config" reference="x_ddb_provider_config" type="reference"/>
+        <element label="Provider" max_length="40" name="provider" type="string"/>
+        <element label="Requested model" max_length="100" name="model" type="string"/>
+        <element label="Served by model" max_length="100" name="served_model" type="string"/>
+        <element display="true" label="Purpose" max_length="40" name="purpose" type="string"/>
+        <element label="Prompt template" max_length="120" name="template" type="string"/>
+        <element label="Prompt SHA-256" max_length="64" name="prompt_hash" type="string"/>
+        <element label="Input tokens" max_length="40" name="input_tokens" type="integer"/>
+        <element label="Output tokens" max_length="40" name="output_tokens" type="integer"/>
+        <element label="Cache read tokens" max_length="40" name="cache_read_tokens" type="integer"/>
+        <element label="Cache write tokens" max_length="40" name="cache_write_tokens" type="integer"/>
+        <element label="Estimated cost (USD)" max_length="15" name="cost" type="decimal"/>
+        <element label="Latency (ms)" max_length="40" name="latency_ms" type="integer"/>
+        <element label="HTTP status" max_length="40" name="http_status" type="integer"/>
+        <element label="Stop reason" max_length="40" name="stop_reason" type="string"/>
+        <element label="Error" max_length="4000" name="error" type="string"/>
+        <element label="Response excerpt" max_length="4000" name="response_excerpt" type="string"/>
+    </element>
+</database>

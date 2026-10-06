@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ui_action"><sys_ui_action action="INSERT_OR_UPDATE"><action_name>x_ddb_preview_build</action_name><active>true</active><client>false</client><condition>gs.hasRole('x_ddb.admin') &amp;&amp; ['valid', 'approved'].indexOf(current.getValue('state')) &gt;= 0</condition><form_button>true</form_button><hint>Show how many records a build would create, without writing anything</hint><name>Preview Build</name><order>120</order><script>(function () {
+	try {
+		const counts = GenerationJob.preview(current);
+		const parts = Object.keys(counts).map(function (k) { return k.replace(/_/g, ' ') + ': ' + counts[k]; });
+		gs.addInfoMessage('A build would create or update ' + parts.join(', ') + '.');
+	} catch (e) {
+		gs.addErrorMessage(e.message);
+	}
+	action.setRedirectURL(current);
+})();
+</script><show_insert>false</show_insert><show_update>true</show_update><sys_class_name>sys_ui_action</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-10-05 00:05:38</sys_created_on><sys_id>0364061c2e09d2e45b6523c5069d833e</sys_id><sys_mod_count>0</sys_mod_count><sys_name>Preview Build</sys_name><sys_package display_value="Demo Data Builder" source="x_ddb">0041744e6783f451e50af1a2a681fa50</sys_package><sys_policy/><sys_scope display_value="Demo Data Builder">0041744e6783f451e50af1a2a681fa50</sys_scope><sys_update_name>sys_ui_action_0364061c2e09d2e45b6523c5069d833e</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-10-05 00:05:38</sys_updated_on><table>x_ddb_blueprint</table></sys_ui_action></record_update>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<database>
+    <element label="Prompt Template" max_length="40" name="x_ddb_prompt_template" type="collection">
+        <element display="true" label="Name" mandatory="true" max_length="100" name="name" type="string"/>
+        <element default="1" label="Version" max_length="40" name="version" type="integer"/>
+        <element default="true" label="Active" max_length="40" name="active" type="boolean"/>
+        <element choice="1" label="Purpose" max_length="40" name="purpose" type="string"/>
+        <element label="Description" max_length="1000" name="description" type="string"/>
+        <element label="System prompt" max_length="65000" name="system_text" type="string"/>
+        <element label="User prompt" max_length="65000" name="user_text" type="string"/>
+    </element>
+</database>

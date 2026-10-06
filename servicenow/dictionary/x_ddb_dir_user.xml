@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<database>
+    <element label="Directory User" max_length="40" name="x_ddb_dir_user" type="collection">
+        <element label="Scenario" max_length="32" name="scenario" reference="x_ddb_scenario" type="reference"/>
+        <element label="distinguishedName" max_length="512" name="dn" type="string"/>
+        <element label="objectGUID" max_length="40" name="objectguid" type="string"/>
+        <element display="true" label="sAMAccountName" max_length="100" name="samaccountname" type="string"/>
+        <element label="userPrincipalName" max_length="200" name="userprincipalname" type="string"/>
+        <element label="mail" max_length="200" name="mail" type="string"/>
+        <element label="givenName" max_length="100" name="givenname" type="string"/>
+        <element label="sn" max_length="100" name="sn" type="string"/>
+        <element label="displayName" max_length="200" name="displayname" type="string"/>
+        <element label="title" max_length="200" name="title" type="string"/>
+        <element label="department" max_length="200" name="department" type="string"/>
+        <element label="company" max_length="200" name="company" type="string"/>
+        <element label="l (city)" max_length="100" name="l" type="string"/>
+        <element label="co (country)" max_length="100" name="co" type="string"/>
+        <element label="physicalDeliveryOfficeName" max_length="200" name="physicaldeliveryofficename" type="string"/>
+        <element label="manager" max_length="512" name="manager" type="string"/>
+        <element label="employeeID" max_length="40" name="employeeid" type="string"/>
+        <element label="telephoneNumber" max_length="40" name="telephonenumber" type="string"/>
+        <element label="mobile" max_length="40" name="mobile" type="string"/>
+        <element label="userAccountControl" max_length="10" name="useraccountcontrol" type="string"/>
+        <element label="memberOf" max_length="8000" name="memberof" type="string"/>
+        <element label="extensionAttribute1 (department key)" max_length="100" name="extensionattribute1" type="string"/>
+        <element label="extensionAttribute2 (location key)" max_length="100" name="extensionattribute2" type="string"/>
+        <element label="extensionAttribute3 (manager objectGUID)" max_length="100" name="extensionattribute3" type="string"/>
+    </element>
+</database>

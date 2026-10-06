@@ -184,6 +184,7 @@ README for the full table.
 /app/                     Source: app.json, script_includes/, tables/, records/, scripts/, prompts/
 /build/                   Update set generator (deterministic sys_ids, dependency-ordered updates)
 /dist/                    Generated update set, committed: ddb-<version>.xml
+/servicenow/              Generated Studio source-control layout (sn_source_control.properties points here)
 /test/                    Node tests against in-memory Glide mocks
 /docs/                    This design, INSTALL.md, schema, examples
 ```
@@ -191,8 +192,8 @@ README for the full table.
 The optional global helper (3.3) is not part of Phase 1; it ships as a separate update set when the
 ITSM simulator needs it.
 
-Installing on a PDI: import `dist/ddb-<version>.xml` as a retrieved update set, preview, commit, then
-follow [INSTALL.md](INSTALL.md).
+Installing on a PDI: use Studio's Import From Source Control on this repository, or import
+`dist/ddb-<version>.xml` as a retrieved update set; see [INSTALL.md](INSTALL.md).
 
 ### 3.5 Plugins
 

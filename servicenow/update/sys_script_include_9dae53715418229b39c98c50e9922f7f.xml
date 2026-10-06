@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include"><sys_script_include action="INSERT_OR_UPDATE"><access>package_private</access><active>true</active><api_name>x_ddb.JsonSchemaValidator</api_name><caller_access/><client_callable>false</client_callable><description>Small JSON Schema validator covering the subset the blueprint schema uses: type (single or list), const, enum, anyOf, properties, required, additionalProperties: false, items, and format: hostname. Claude structured output already guarantees conformance for the Anthropic provider; this check matters for hand-edited blueprints and providers without schema enforcement.</description><name>JsonSchemaValidator</name><script>/**
+ * Small JSON Schema validator covering the subset the blueprint schema uses:
+ * type (single or list), const, enum, anyOf, properties, required,
+ * additionalProperties: false, items, and format: hostname.
+ *
+ * Claude structured output already guarantees conformance for the Anthropic provider;
+ * this check matters for hand-edited blueprints and providers without schema enforcement.
+ *
+ * @access package_private
+ */
+var JsonSchemaValidator = Class.create();
+
+JsonSchemaValidator.HOSTNAME = /^(?=.{1,253}$)([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+
+JsonSchemaValidator.typeOf = function (value) {
+	if (value === null)
+		return 'null';
+	if (Array.isArray(value))
+		return 'array';
+	if (typeof value === 'number')
+		return value % 1 === 0 ? 'integer' : 'number';
+	return typeof value;
+};
+
+JsonSchemaValidator.prototype = {
+	initialize: function (maxErrors) {
+		this.maxErrors = maxErrors || 100;
+	},
+
+	/** @returns {Array&lt;{path: string, message: string}&gt;} */
+	validate: function (value, schema) {
+		const errors = [];
+		this._check(value, schema, '$', errors);
+		return errors;
+	},
+
+	_check: function (value, schema, path, errors) {
+		if (errors.length &gt;= this.maxErrors || !schema)
+			return;
+
+		if (schema.anyOf) {
+			for (let i = 0; i &lt; schema.anyOf.length; i++) {
+				if (this.validate(value, schema.anyOf[i]).length === 0)
+					return;
+			}
+			errors.push({ path: path, message: 'does not match any allowed form' });
+			return;
+		}
+
+		if (schema.type) {
+			const types = Array.isArray(schema.type) ? schema.type : [schema.type];
+			const actual = JsonSchemaValidator.typeOf(value);
+			const ok = types.indexOf(actual) &gt;= 0 || (actual === 'integer' &amp;&amp; types.indexOf('number') &gt;= 0);
+			if (!ok) {
+				errors.push({ path: path, message: 'expected ' + types.join(' or ') + ', got ' + actual });
+				return;
+			}
+		}
+
+		if (schema.hasOwnProperty('const') &amp;&amp; value !== schema['const'])
+			errors.push({ path: path, message: 'must equal ' + JSON.stringify(schema['const']) });
+
+		if (schema['enum'] &amp;&amp; schema['enum'].indexOf(value) &lt; 0)
+			errors.push({ path: path, message: 'must be one of ' + schema['enum'].join(', ') + ' (got ' + JSON.stringify(value) + ')' });
+
+		if (schema.format === 'hostname' &amp;&amp; typeof value === 'string' &amp;&amp; !JsonSchemaValidator.HOSTNAME.test(value))
+			errors.push({ path: path, message: 'is not a valid hostname' });
+
+		if (JsonSchemaValidator.typeOf(value) === 'object') {
+			const props = schema.properties || {};
+			const required = schema.required || [];
+			for (let r = 0; r &lt; required.length; r++) {
+				if (!value.hasOwnProperty(required[r]))
+					errors.push({ path: path, message: 'missing required property &quot;' + required[r] + '&quot;' });
+			}
+			const keys = Object.keys(value);
+			for (let k = 0; k &lt; keys.length; k++) {
+				const key = keys[k];
+				if (props.hasOwnProperty(key))
+					this._check(value[key], props[key], path + '.' + key, errors);
+				else if (schema.additionalProperties === false)
+					errors.push({ path: path, message: 'unexpected property &quot;' + key + '&quot;' });
+			}
+		}
+
+		if (Array.isArray(value) &amp;&amp; schema.items) {
+			for (let a = 0; a &lt; value.length; a++)
+				this._check(value[a], schema.items, path + '[' + a + ']', errors);
+		}
+	},
+
+	type: 'JsonSchemaValidator'
+};
+</script><sys_class_name>sys_script_include</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-10-05 00:05:02</sys_created_on><sys_id>9dae53715418229b39c98c50e9922f7f</sys_id><sys_mod_count>0</sys_mod_count><sys_name>JsonSchemaValidator</sys_name><sys_package display_value="Demo Data Builder" source="x_ddb">0041744e6783f451e50af1a2a681fa50</sys_package><sys_policy/><sys_scope display_value="Demo Data Builder">0041744e6783f451e50af1a2a681fa50</sys_scope><sys_update_name>sys_script_include_9dae53715418229b39c98c50e9922f7f</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-10-05 00:05:02</sys_updated_on></sys_script_include></record_update>
