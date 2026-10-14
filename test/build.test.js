@@ -152,3 +152,17 @@ test('app sources use no HTML named entities (Jelly only knows the five XML ones
 	});
 	assert.deepEqual(bad, []);
 });
+
+test('records are stamped with a build time recorded for the current content', () => {
+	const { contentHash } = require('../build/build');
+	const { readBuildState } = require('../build/lib/source');
+	const state = readBuildState();
+	assert.equal(contentHash(loadApp()), state.contentHash, 'source changed without a rebuild; run npm run build');
+	assert.equal(src.app.build_timestamp, state.timestamp);
+	built.updates.forEach((u) => {
+		const stamp = /<sys_updated_on>([^<]+)<\/sys_updated_on>/.exec(u.payload)[1];
+		assert.ok(stamp >= state.timestamp, u.name + ' stamped ' + stamp + ', before the build time');
+	});
+	assert.match(built.xml, new RegExp('<name>Demo Data Builder ' + src.app.version.replace(/\./g, '\\.') +
+		' \\(build ' + state.timestamp + ' UTC\\)</name>'));
+});

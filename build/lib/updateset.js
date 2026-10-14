@@ -10,8 +10,10 @@
 // use the grouped sys_documentation and sys_choice wrappers.
 //
 // Every record gets a deterministic sys_id (md5 of a stable key) so rebuilding gives the
-// same output and re-importing updates records in place. Updates are timestamped in
-// dependency order (app, tables, columns, then everything else).
+// same output and re-importing updates records in place. Updates are timestamped from the
+// build time (see build/build.js) in dependency order (app, tables, columns, then the rest).
+// The timestamps matter: ServiceNow skips an incoming update when the instance's copy of the
+// record was updated more recently, so every content change needs a newer build time.
 
 const crypto = require('crypto');
 
@@ -56,7 +58,8 @@ class AppBuilder {
 		this.app = app;
 		this.scope = app.scope;
 		this.appId = this.id('sys_app', app.scope);
-		this.remoteId = this.id('sys_remote_update_set', app.scope + '@' + app.version);
+		// A new identity per build, so re-importing a newer build is a new retrieved update set.
+		this.remoteId = this.id('sys_remote_update_set', app.scope + '@' + app.version + '@' + app.build_timestamp);
 		this.updates = [];
 		this.tables = [];
 		this.seq = 0;
@@ -414,7 +417,7 @@ class AppBuilder {
 			const x = at ? attrs(at) : '';
 			return value === '' || value === null || value === undefined ? '<' + name + x + '/>' : '<' + name + x + '>' + esc(value) + '</' + name + '>';
 		};
-		const setName = a.name + ' ' + a.version;
+		const setName = a.name + ' ' + a.version + ' (build ' + a.build_timestamp + ' UTC)';
 		out.push('<sys_remote_update_set action="INSERT_OR_UPDATE">' + [
 			field('application', this.appId, { display_value: a.name }),
 			field('application_name', a.name),
@@ -459,7 +462,7 @@ class AppBuilder {
 				field('replace_on_upgrade', 'false'),
 				field('sys_created_by', 'admin'),
 				field('sys_created_on', u.created),
-				field('sys_id', md5('sys_update_xml:' + u.name)),
+				field('sys_id', md5('sys_update_xml:' + this.remoteId + ':' + u.name)),
 				field('sys_mod_count', '0'),
 				field('sys_recorded_at', u.created),
 				field('sys_updated_by', 'admin'),

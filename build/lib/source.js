@@ -96,6 +96,22 @@ function loadScriptIncludes(generated) {
 	});
 }
 
+const BUILD_STATE = path.join(ROOT, 'build', 'build-state.json');
+
+/**
+ * { contentHash, timestamp }: the build time last stamped onto the generated records and
+ * the hash of the content it was stamped for. Written by build/build.js.
+ */
+function readBuildState() {
+	if (!fs.existsSync(BUILD_STATE))
+		return { contentHash: '', timestamp: '2000-01-01 00:00:00' };
+	return readJson(BUILD_STATE);
+}
+
+function writeBuildState(state) {
+	fs.writeFileSync(BUILD_STATE, JSON.stringify(state, null, 2) + '\n');
+}
+
 function loadApp() {
 	const generated = loadGenerated();
 	const tablesDir = path.join(APP, 'tables');
@@ -112,8 +128,10 @@ function loadApp() {
 			records.push({ table: r.table, key: r.key, fields: fields, file: f });
 		});
 	});
+	const app = readJson(path.join(APP, 'app.json'));
+	app.build_timestamp = readBuildState().timestamp;
 	return {
-		app: readJson(path.join(APP, 'app.json')),
+		app: app,
 		tables: tables,
 		scriptIncludes: loadScriptIncludes(generated),
 		records: records,
@@ -122,4 +140,4 @@ function loadApp() {
 	};
 }
 
-module.exports = { ROOT, APP, loadApp, loadGenerated, loadScriptIncludes, inject, parsePrompt, SCRIPT_INCLUDE_ORDER };
+module.exports = { ROOT, APP, BUILD_STATE, readBuildState, writeBuildState, loadApp, loadGenerated, loadScriptIncludes, inject, parsePrompt, SCRIPT_INCLUDE_ORDER };

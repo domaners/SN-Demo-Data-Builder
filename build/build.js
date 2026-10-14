@@ -7,10 +7,16 @@
 //
 //   node build/build.js          write both
 //   node build/build.js --check  fail if either is out of date
+//
+// Records are stamped with the build time recorded in build/build-state.json. The time only
+// moves when the content changes (hash taken with a fixed placeholder time), so builds stay
+// reproducible while every real change is newer than the copy already on an instance, which
+// ServiceNow requires before it applies an update.
 
 const fs = require('fs');
 const path = require('path');
-const { loadApp, ROOT } = require('./lib/source');
+const crypto = require('crypto');
+const { loadApp, ROOT, readBuildState, writeBuildState } = require('./lib/source');
 const { buildApp } = require('./lib/updateset');
 const { checkWellFormed } = require('./lib/xmlcheck');
 
@@ -59,9 +65,37 @@ function listFiles(dir) {
 	return out;
 }
 
+const PLACEHOLDER_TIME = '2000-01-01 00:00:00';
+
+/** Hash of everything the build produces, independent of the build time. */
+function contentHash(src) {
+	const probe = Object.assign({}, src, { app: Object.assign({}, src.app, { build_timestamp: PLACEHOLDER_TIME }) });
+	const files = outputs(probe, buildApp(probe));
+	const hash = crypto.createHash('sha256');
+	Object.keys(files).sort().forEach((f) => hash.update(f + '\n' + files[f] + '\n'));
+	return hash.digest('hex');
+}
+
+function nowUtc() {
+	return new Date().toISOString().replace('T', ' ').slice(0, 19);
+}
+
 function main() {
 	const check = process.argv.indexOf('--check') >= 0;
 	const src = loadApp();
+	const hash = contentHash(src);
+	const state = readBuildState();
+	if (hash !== state.contentHash) {
+		if (check) {
+			console.error('Source changed since the last build (build/build-state.json). Run: npm run build');
+			process.exit(1);
+		}
+		state.contentHash = hash;
+		state.timestamp = nowUtc();
+		writeBuildState(state);
+		src.app.build_timestamp = state.timestamp;
+		console.log('Content changed; new build time ' + state.timestamp + ' UTC.');
+	}
 	const result = buildApp(src);
 	checkWellFormed(result.xml);
 	result.updates.forEach((u) => checkWellFormed(u.payload, u.name));
@@ -69,7 +103,7 @@ function main() {
 		.forEach((f) => checkWellFormed(result.sourceControl[f], f));
 
 	const files = outputs(src, result);
-	const stale = listFiles(SC_DIR).filter((f) => !(f in files));
+	const stale = listFiles(SC_DIR).concat(listFiles('dist')).filter((f) => !(f in files));
 
 	if (check) {
 		const problems = Object.keys(files).filter((f) => {
@@ -92,10 +126,10 @@ function main() {
 		fs.writeFileSync(abs, files[f]);
 	});
 	console.log('Wrote dist/ddb-' + src.app.version + '.xml and ' + SC_DIR + '/ (' + result.updates.length +
-		' updates, ' + Object.keys(result.sourceControl).length + ' files).');
+		' updates, ' + Object.keys(result.sourceControl).length + ' files, build ' + src.app.build_timestamp + ' UTC).');
 }
 
-module.exports = { outputs, SC_DIR };
+module.exports = { outputs, contentHash, SC_DIR };
 
 if (require.main === module)
 	main();

@@ -1,11 +1,10 @@
 {
   "name": "Demo Data Builder",
   "scope": "x_ddb",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "vendor": "SN Demo Data Builder",
   "short_description": "Uses Claude to generate realistic, living demo data (foundation, CMDB, ITSM) on demo and PDI instances",
   "js_level": "es_latest",
-  "build_timestamp": "2026-10-05 00:00:00",
   "scope_privileges": [
     { "tables": ["core_company", "cmn_cost_center", "cmn_location", "cmn_department", "sys_user", "sys_user_group", "sys_user_grmember", "sys_user_has_role", "sys_group_has_role"],
       "operations": ["read", "create", "write", "delete"] },

@@ -32,16 +32,31 @@ Do not commit changes back to this repository from Studio: `servicenow/` is gene
 
 ### Option B: update set
 
-1. Download `dist/ddb-0.1.0.xml` from this repository.
+1. Download `dist/ddb-<version>.xml` (currently `ddb-0.1.1.xml`) from this repository.
 2. On the PDI, as `admin`: **System Update Sets > Retrieved Update Sets > Import Update Set from XML**,
    upload the file.
-3. Open **Demo Data Builder 0.1.0**, click **Preview Update Set**, resolve anything listed (there
+3. Open **Demo Data Builder 0.1.1 (build ...)**, click **Preview Update Set**, resolve anything listed (there
    should be nothing on a clean instance), then **Commit Update Set**.
 4. Refresh the browser. The **Demo Data Builder** application menu appears.
 
 The app installs in its own scope (`x_ddb`). It is blocked on any instance with
 `glide.installation.production = true`. To restrict it further, set `x_ddb.allowed_instances` to a
 comma-separated list of instance names.
+
+### Updating an existing install
+
+Every build stamps its records with the build time. ServiceNow only applies an incoming update when it
+is newer than the instance's copy of the record, so always take the latest build:
+
+- **Installed with Studio (Option A):** in Studio, **Source Control > Apply Remote Changes**. If Studio
+  reports local changes (for example a Script Include you edited by hand), stash or discard them first,
+  otherwise your local copy wins.
+- **Installed with the update set (Option B):** import the newest `dist/ddb-<version>.xml`. Each build
+  has its own name, `Demo Data Builder <version> (build <time> UTC)`, so it arrives as a new
+  retrieved update set. Preview, accept remote updates for any collisions, and commit.
+
+Builds made before 14 October 2026 used a fixed timestamp, so the instance treated them as older than
+what was installed and skipped them. Updating to 0.1.1 or later fixes this.
 
 ## 2. Give it a Claude API key
 

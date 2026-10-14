@@ -31,7 +31,7 @@ so the same blueprint and seed always give the same instance and API spend stays
 | `app/records/` | Roles, menu and modules, properties, UI actions, event, Script Action, scheduled job, business rule, UI page |
 | `app/scripts/` | Script bodies referenced by `app/records/` |
 | `app/prompts/` | Prompt templates (front matter + `=== system ===` / `=== user ===`) |
-| `build/` | Generates the update set from `app/` |
+| `build/` | Generates the update set and Studio layout from `app/`; `build-state.json` records the build time stamped on records |
 | `dist/ddb-<version>.xml` | The importable update set (generated, committed) |
 | `servicenow/`, `sn_source_control.properties` | The same app in Studio source-control layout, for **Import From Source Control** (generated, committed) |
 | `test/` | Node tests running the Script Includes against in-memory Glide mocks |
