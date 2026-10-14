@@ -3383,7 +3383,7 @@ SetupCheck.prototype = {
 			'&amp;lt;tr style=&amp;quot;background:#eceff1&amp;quot;&amp;gt;&amp;lt;th style=&amp;quot;padding:6px 12px;text-align:left&amp;quot;&amp;gt;Check&amp;lt;/th&amp;gt;&amp;lt;th style=&amp;quot;padding:6px 12px;text-align:left&amp;quot;&amp;gt;Result&amp;lt;/th&amp;gt;&amp;lt;th style=&amp;quot;padding:6px 12px;text-align:left&amp;quot;&amp;gt;Details&amp;lt;/th&amp;gt;&amp;lt;/tr&amp;gt;' +
 			rows + '&amp;lt;/table&amp;gt;' +
 			'&amp;lt;p style=&amp;quot;margin-top:16px&amp;quot;&amp;gt;&amp;lt;a href=&amp;quot;x_ddb_setup_check.do?live=true&amp;quot;&amp;gt;Test connection&amp;lt;/a&amp;gt;' +
-			(live ? ' &amp;amp;middot; &amp;lt;a href=&amp;quot;x_ddb_setup_check.do&amp;quot;&amp;gt;Run without connection test&amp;lt;/a&amp;gt;' : '') + '&amp;lt;/p&amp;gt;&amp;lt;/div&amp;gt;';
+			(live ? ' &amp;amp;#183; &amp;lt;a href=&amp;quot;x_ddb_setup_check.do&amp;quot;&amp;gt;Run without connection test&amp;lt;/a&amp;gt;' : '') + '&amp;lt;/p&amp;gt;&amp;lt;/div&amp;gt;';
 	},
 
 	type: 'SetupCheck'

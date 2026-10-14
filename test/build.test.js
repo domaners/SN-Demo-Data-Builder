@@ -133,3 +133,22 @@ test('payloads use the shapes Studio exports', () => {
 	const app = byName['sys_app_' + built.appId];
 	assert.ok(!/<sys_scope/.test(app), 'the application record does not reference a scope');
 });
+
+test('app sources use no HTML named entities (Jelly only knows the five XML ones)', () => {
+	const files = [];
+	const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).forEach((e) => {
+		const p = path.join(dir, e.name);
+		if (e.isDirectory())
+			walk(p);
+		else if (/\.(js|xml)$/.test(e.name))
+			files.push(p);
+	});
+	walk(path.join(ROOT, 'app'));
+	const bad = [];
+	files.forEach((f) => {
+		const m = fs.readFileSync(f, 'utf8').match(/&(?!(amp|lt|gt|quot|apos);)[a-zA-Z][a-zA-Z0-9]*;/g);
+		if (m)
+			bad.push(path.relative(ROOT, f) + ': ' + m.join(', '));
+	});
+	assert.deepEqual(bad, []);
+});

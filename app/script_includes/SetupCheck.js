@@ -155,7 +155,7 @@ SetupCheck.prototype = {
 			'<tr style="background:#eceff1"><th style="padding:6px 12px;text-align:left">Check</th><th style="padding:6px 12px;text-align:left">Result</th><th style="padding:6px 12px;text-align:left">Details</th></tr>' +
 			rows + '</table>' +
 			'<p style="margin-top:16px"><a href="x_ddb_setup_check.do?live=true">Test connection</a>' +
-			(live ? ' &middot; <a href="x_ddb_setup_check.do">Run without connection test</a>' : '') + '</p></div>';
+			(live ? ' &#183; <a href="x_ddb_setup_check.do">Run without connection test</a>' : '') + '</p></div>';
 	},
 
 	type: 'SetupCheck'

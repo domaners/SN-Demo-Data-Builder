@@ -305,3 +305,15 @@ test('setup check reports configuration state', () => {
 	assert.equal(bareResults.find((r) => r.name === 'Provider configuration').status, 'fail');
 	assert.equal(bareResults.find((r) => r.name === 'Background processing').status, 'fail');
 });
+
+test('setup check HTML is well-formed XML with no undeclared entities', () => {
+	const { checkWellFormed } = require('../build/lib/xmlcheck');
+	const { h } = setup();
+	[true, false].forEach((live) => {
+		h.respond({ status: 200, body: { display_name: 'Claude Opus 5.5' } });
+		const html = h.eval('(function () { var c = new SetupCheck(); return c.renderHtml(c.run(' + live + '), ' + live + '); })()');
+		// Jelly parses UI page output as XML, which only declares amp, lt, gt, quot and apos.
+		checkWellFormed(html, 'setup check (live=' + live + ')');
+		assert.doesNotMatch(html, /&(?!(amp|lt|gt|quot|apos|#\d+|#x[0-9a-f]+);)[a-z]+;/i);
+	});
+});
