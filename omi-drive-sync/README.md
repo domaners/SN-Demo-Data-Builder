@@ -71,8 +71,52 @@ flutter run            # with a phone connected over USB; Bluetooth does not wor
 For iOS, run `cd ios && pod install` once, open `ios/Runner.xcworkspace` in Xcode, and choose your signing
 team.
 
-To build a release APK, run `flutter build apk --release`. Release builds are signed with a different key,
-so add that key's SHA-1 to the Android OAuth client too.
+To build an APK, run `flutter build apk --release`. The APK is written to
+`build/app/outputs/flutter-apk/app-release.apk` and is signed with your debug key, unless you set the
+`ANDROID_KEYSTORE_*` variables described below.
+
+### Building with GitHub Actions (no Android Studio needed)
+
+The workflow `.github/workflows/omi-drive-sync-apk.yml` builds the APK on GitHub. It runs whenever a push
+changes `omi-drive-sync/`, and you can start it from **Actions → Omi Drive Sync APK → Run workflow**. When a
+run finishes, download **omi-drive-sync-apk** from the run's **Artifacts** section. The download is a zip
+with the APK inside.
+
+Google Sign-In accepts an APK only when its signing key matches the SHA-1 on your Android OAuth client, so
+every build has to use the same key. Create one once and give it to GitHub as secrets:
+
+1. Create a keystore. You need Java's `keytool`, which comes with any JDK, for example
+   [Temurin](https://adoptium.net). Pick a password and keep the file and password somewhere safe: a
+   sideloaded app can only be updated by an APK signed with the same key.
+   ```sh
+   keytool -genkeypair -v -keystore omi-release.jks -alias omi -keyalg RSA -keysize 2048 -validity 10000
+   ```
+2. Base64-encode it, all on one line:
+   ```sh
+   base64 -w0 omi-release.jks > omi-release.b64        # Linux
+   base64 -i omi-release.jks -o omi-release.b64       # macOS
+   [Convert]::ToBase64String([IO.File]::ReadAllBytes("omi-release.jks")) > omi-release.b64   # Windows PowerShell
+   ```
+3. In the GitHub repo, open **Settings → Secrets and variables → Actions → New repository secret** and add:
+   | Name | Value |
+   |---|---|
+   | `ANDROID_KEYSTORE_BASE64` | the contents of `omi-release.b64` |
+   | `ANDROID_KEYSTORE_PASSWORD` | the keystore password |
+   | `ANDROID_KEY_ALIAS` | `omi` (the `-alias` you used) |
+4. Run the workflow. The run's summary page shows the key's SHA-1. Add it to your Android OAuth client in
+   Google Cloud (step 1 above). You only need to do this once.
+
+**Never commit the `.jks` file.** This repository is public. The `.gitignore` already excludes keystores.
+
+Without the secrets, the workflow still builds and the app still talks to the pendant. However, the APK is
+signed with a throwaway key that changes on every run, so Google sign-in fails.
+
+To sign local builds with the same key, set the variables before you build:
+```sh
+export ANDROID_KEYSTORE_PATH=/path/to/omi-release.jks ANDROID_KEY_ALIAS=omi
+export ANDROID_KEYSTORE_PASSWORD=... ANDROID_KEY_PASSWORD=...   # the same password
+flutter build apk --release
+```
 
 ## 3. Use it
 

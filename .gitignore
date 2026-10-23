@@ -1,0 +1,4 @@
+# Android signing keys for omi-drive-sync: never commit (the repo is public)
+*.jks
+*.keystore
+*.b64

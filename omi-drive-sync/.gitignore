@@ -46,3 +46,9 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Android signing keys: never commit (the repo is public)
+*.jks
+*.keystore
+*.b64
+key.properties
